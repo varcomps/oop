@@ -1,9 +1,14 @@
 const buildMenu = document.getElementById('buildMenu');
+const hullCountDisplay = document.getElementById('hullCountDisplay');
 
 let shipTiles = [];
 let installedModules = [];
-let startGX = 0, startGY = 0;
+let detachedTiles = []; 
 
+// Таймер для анимации ошибки (мигание)
+let detachAnimTimer = 0; 
+
+let startGX = 0, startGY = 0;
 let isBuildMenuOpen = false;
 let selectedBuildItem = null;
 let movingOriginalState = null;
@@ -34,21 +39,120 @@ function initShip() {
     player.x = (startGX + 2) * TILE_SIZE; player.y = (startGY + 3) * TILE_SIZE;
 }
 
-function toggleBuildMenu() {
-    if (currentState !== STATE_SHIP || transition.active) return;
+function updateBuildUI() {
+    if (hullCountDisplay) hullCountDisplay.innerText = `x${player.hullParts}`;
+}
+
+// АЛГОРИТМ ПОИСКА КЛАСТЕРОВ
+function getShipClusters() {
+    const clusters = [];
+    const visited = new Set();
+    const tiles = [...shipTiles]; 
+
+    for (let i = 0; i < tiles.length; i++) {
+        const startNode = tiles[i];
+        const key = `${startNode.x},${startNode.y}`;
+        
+        if (visited.has(key)) continue;
+
+        const currentCluster = [];
+        const queue = [startNode];
+        visited.add(key);
+        currentCluster.push(startNode);
+
+        while (queue.length > 0) {
+            const current = queue.shift();
+            const neighbors = [
+                {x: current.x + 1, y: current.y},
+                {x: current.x - 1, y: current.y},
+                {x: current.x, y: current.y + 1},
+                {x: current.x, y: current.y - 1}
+            ];
+
+            neighbors.forEach(n => {
+                const nKey = `${n.x},${n.y}`;
+                const exists = tiles.some(t => t.x === n.x && t.y === n.y);
+                if (exists && !visited.has(nKey)) {
+                    visited.add(nKey);
+                    queue.push(n);
+                    currentCluster.push(n);
+                }
+            });
+        }
+        clusters.push(currentCluster);
+    }
+    clusters.sort((a, b) => b.length - a.length);
+    return clusters;
+}
+
+function tryToggleBuildMenu() {
+    if (transition.active) return false;
+
+    // Элементы UI для переключения
+    const hud = document.getElementById('hud-top-left');
+    const handle = document.querySelector('.build-handle-strip');
+
+    if (isBuildMenuOpen) {
+        const clusters = getShipClusters();
+        
+        if (clusters.length > 1) {
+            detachedTiles = [];
+            for (let i = 1; i < clusters.length; i++) {
+                detachedTiles.push(...clusters[i]);
+            }
+            // ЗАПУСКАЕМ ТАЙМЕР ОШИБКИ
+            detachAnimTimer = 100; // ~1.5 секунды анимации
+            uiHint.innerHTML = "<span style='color:red'>ОШИБКА: РАЗРЫВ КОРПУСА!</span>";
+            return false;
+        } else {
+            detachedTiles = [];
+        }
+    }
+
     isBuildMenuOpen = !isBuildMenuOpen;
+    
     if (isBuildMenuOpen) { 
-        buildMenu.style.display = 'flex'; uiHint.classList.add('shifted'); 
+        buildMenu.classList.remove('slide-in');
+        
+        // Входим в режим строительства: СКРЫВАЕМ HUD, ПОКАЗЫВАЕМ РУЧКУ
+        if(hud) hud.style.display = 'none';
+        if(handle) handle.style.display = 'flex';
+
         const shipCenterX = (startGX + 2) * TILE_SIZE;
         const shipCenterY = (startGY + 4) * TILE_SIZE;
-        viewOffset.x = canvas.width / 2 - shipCenterX;
+        viewOffset.x = canvas.width / 2 - shipCenterX; 
         viewOffset.y = canvas.height / 2 - shipCenterY;
+        
+        updateBuildUI();
+        detachedTiles = []; 
+        switchTab('structure');
+        
+        clearCursor(); 
     } else {
+        // Выходим из режима строительства: ПОКАЗЫВАЕМ HUD, СКРЫВАЕМ РУЧКУ
+        if(hud) hud.style.display = 'flex';
+        if(handle) handle.style.display = 'none';
+
         if (movingOriginalState) { installedModules.push(movingOriginalState); movingOriginalState = null; }
-        isBuildMenuOpen = false; buildMenu.style.display = 'none'; uiHint.classList.remove('shifted'); clearCursor();
+        buildMenu.classList.remove('slide-in');
+        clearCursor();
     }
     inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
+    return true;
 }
+
+// ЛОГИКА АВТОСКРЫТИЯ МЕНЮ
+window.addEventListener('mousemove', (e) => {
+    if (!isBuildMenuOpen) return;
+
+    // Увеличили зону, чтобы ловить ручку
+    if (e.clientX < 45 || (e.clientX < 200 && buildMenu.classList.contains('slide-in'))) {
+        buildMenu.classList.add('slide-in');
+    } else {
+        buildMenu.classList.remove('slide-in');
+    }
+});
+
 
 function clearCursor() { selectedBuildItem = null; document.querySelectorAll('.module-item').forEach(b => b.classList.remove('active')); }
 function switchTab(category) {
@@ -65,26 +169,71 @@ function selectModule(type) {
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
 }
 
-// Функции строительства
 function getGridFromMouse() { return { gx: Math.floor((mouseX - viewOffset.x) / TILE_SIZE), gy: Math.floor((mouseY - viewOffset.y) / TILE_SIZE) }; }
 function getFloor(gx, gy) { return shipTiles.find(t => t.x === gx && t.y === gy); }
 function isTileOccupiedByModule(gx, gy) { return installedModules.some(m => gx >= m.x && gx < m.x + m.w && gy >= m.y && gy < m.y + m.h); }
-function getModuleWidth(type) { let w=2, h=1; if(['engine','bridge','storage'].includes(type)) {w=2;h=2;} else if(type==='airlock'){w=1;h=2;} else {w=1;h=1;} return buildRotation===1 ? h : w; }
-function getModuleHeight(type) { let w=2, h=1; if(['engine','bridge','storage'].includes(type)) {w=2;h=2;} else if(type==='airlock'){w=1;h=2;} else {w=1;h=1;} return buildRotation===1 ? w : h; }
+
+function getBaseWidth(type) { if(['engine','bridge','storage'].includes(type)) return 2; if(type==='airlock') return 1; return 1; }
+function getBaseHeight(type) { if(['engine','bridge','storage'].includes(type)) return 2; if(type==='airlock') return 2; return 1; }
+
+function getModuleWidth(type) { 
+    const w = getBaseWidth(type); const h = getBaseHeight(type);
+    return buildRotation === 1 ? h : w; 
+}
+function getModuleHeight(type) { 
+    const w = getBaseWidth(type); const h = getBaseHeight(type);
+    return buildRotation === 1 ? w : h; 
+}
 
 function canBuildFloor(gx, gy) {
     if (getFloor(gx, gy) || isTileOccupiedByModule(gx, gy)) return false;
     return getFloor(gx+1, gy) || getFloor(gx-1, gy) || getFloor(gx, gy+1) || getFloor(gx, gy-1);
 }
+
 function canBuildModule(gx, gy, type) {
     const w = getModuleWidth(type); const h = getModuleHeight(type);
+    
+    // Проверка на пересечение с другими модулями
     for (let i=0; i<w; i++) for (let j=0; j<h; j++) if (isTileOccupiedByModule(gx+i, gy+j)) return false;
+    
+    // Двигатель (сзади)
     if (type === 'engine') {
         if (buildRotation !== 0) return false;
         if (!getFloor(gx, gy) || !getFloor(gx+1, gy)) return false;
         if (getFloor(gx, gy+1) || getFloor(gx+1, gy+1)) return false;
         return true;
     }
+
+    // Шлюз (Airlock) - ЖЕСТКАЯ ПРОВЕРКА СТЕН
+    if (type === 'airlock') {
+        // 1. Сам шлюз должен стоять ПОЛНОСТЬЮ НА ПОЛУ
+        for (let i=0; i<w; i++) for (let j=0; j<h; j++) if (!getFloor(gx+i, gy+j)) return false;
+
+        let leftSideVoid = true; 
+        let rightSideVoid = true;
+        let topSideVoid = true;
+        let bottomSideVoid = true;
+
+        if (buildRotation === 0) { // Вертикальный (1x2)
+            // Проверяем Левую сторону (должны быть ОБЕ клетки пустые)
+            if (getFloor(gx-1, gy) || getFloor(gx-1, gy+1)) leftSideVoid = false;
+            // Проверяем Правую сторону
+            if (getFloor(gx+1, gy) || getFloor(gx+1, gy+1)) rightSideVoid = false;
+            
+            // Валидно, если ХОТЯ БЫ ОДНА длинная сторона ПОЛНОСТЬЮ выходит в космос
+            return leftSideVoid || rightSideVoid;
+        } 
+        else { // Горизонтальный (2x1)
+            // Проверяем Верхнюю сторону
+            if (getFloor(gx, gy-1) || getFloor(gx+1, gy-1)) topSideVoid = false;
+            // Проверяем Нижнюю сторону
+            if (getFloor(gx, gy+1) || getFloor(gx+1, gy+1)) bottomSideVoid = false;
+            
+            return topSideVoid || bottomSideVoid;
+        }
+    }
+
+    // Остальные модули - просто на полу
     for (let i=0; i<w; i++) for (let j=0; j<h; j++) if (!getFloor(gx+i, gy+j)) return false;
     return true;
 }
@@ -95,7 +244,16 @@ function attemptBuild() {
     if (gx < 0 || gx >= TARGET_COLS || gy < 0 || gy >= TARGET_ROWS) return;
 
     if (selectedBuildItem) {
-        if (selectedBuildItem === 'basic') { if (canBuildFloor(gx, gy)) shipTiles.push({x: gx, y: gy}); } 
+        if (selectedBuildItem === 'basic') { 
+            if (canBuildFloor(gx, gy)) {
+                if (player.hullParts > 0) {
+                    shipTiles.push({x: gx, y: gy});
+                    player.hullParts--;
+                    updateBuildUI();
+                    detachedTiles = []; 
+                }
+            } 
+        } 
         else {
             if (canBuildModule(gx, gy, selectedBuildItem)) {
                 installedModules.push({ type: selectedBuildItem, x: gx, y: gy, w: getModuleWidth(selectedBuildItem), h: getModuleHeight(selectedBuildItem) });
@@ -105,22 +263,117 @@ function attemptBuild() {
     }
 }
 
-// Обработчик клика в режиме строительства
-canvas.addEventListener('mousedown', () => {
-    isMouseDown = true;
+function attemptDelete() {
+    if (currentState !== STATE_SHIP || !isBuildMenuOpen || transition.active) return;
+    const { gx, gy } = getGridFromMouse();
+    
+    if (selectedBuildItem === 'basic' || selectedBuildItem === null) {
+        const floor = getFloor(gx, gy);
+        if (floor && !isTileOccupiedByModule(gx, gy)) {
+            const idx = shipTiles.findIndex(t => t.x === gx && t.y === gy);
+            if (idx !== -1) {
+                shipTiles.splice(idx, 1);
+                player.hullParts++; 
+                updateBuildUI();
+                detachedTiles = []; 
+            }
+        }
+    }
+}
+
+function drawDiagonalStripes(x, y, alpha) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, TILE_SIZE, TILE_SIZE);
+    ctx.clip(); 
+
+    ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+    ctx.lineWidth = 4;
+    
+    for (let i = -TILE_SIZE; i < TILE_SIZE * 2; i += 15) {
+        ctx.beginPath();
+        ctx.moveTo(x + i, y - 10);
+        ctx.lineTo(x + i + TILE_SIZE, y + TILE_SIZE + 10);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+// НОВАЯ ФУНКЦИЯ ДЛЯ ТЕЛЕПОРТАЦИИ К ШЛЮЗУ ИЗ АНГАРА
+function teleportPlayerToInterior() {
+    const airlock = installedModules.find(m => m.type === 'airlock');
+    if (!airlock) return;
+
+    const w = airlock.w;
+    const h = airlock.h;
+    let targetX = airlock.x;
+    let targetY = airlock.y;
+
+    // Определяем, с какой стороны пол (внутри корабля), а с какой - космос
+    // Вертикальный шлюз (1x2)
+    if (w === 1 && h === 2) {
+        if (getFloor(airlock.x - 1, airlock.y)) {
+            targetX = airlock.x - 1; // Пол слева
+        } else {
+            targetX = airlock.x + 1; // Пол справа
+        }
+    } 
+    // Горизонтальный шлюз (2x1)
+    else {
+        if (getFloor(airlock.x, airlock.y - 1)) {
+            targetY = airlock.y - 1; // Пол сверху
+        } else {
+            targetY = airlock.y + 1; // Пол снизу
+        }
+    }
+
+    // Ставим игрока в центр найденной клетки пола
+    player.x = (targetX + 0.5) * TILE_SIZE;
+    player.y = (targetY + 0.5) * TILE_SIZE;
+}
+
+canvas.addEventListener('mousedown', (e) => {
     if (currentState === STATE_SHIP && isBuildMenuOpen) {
-        if (selectedBuildItem) { attemptBuild(); return; }
-        const { gx, gy } = getGridFromMouse();
-        const idx = installedModules.findIndex(m => gx >= m.x && gx < m.x + m.w && gy >= m.y && gy < m.y + m.h);
-        if (idx !== -1) {
-            const mod = installedModules[idx];
-            movingOriginalState = mod; installedModules.splice(idx, 1); selectedBuildItem = mod.type;
-            if (mod.type === 'engine') buildRotation = 0;
-            else { let baseW=1; if(['bridge','storage'].includes(mod.type)) baseW=2; else if(mod.type==='airlock') baseW=1; buildRotation = (mod.w!==baseW)?1:0; }
-            document.querySelectorAll('.module-item').forEach(b => b.classList.remove('active'));
+        if (e.button === 0) { 
+            isMouseDown = true; 
+            
+            if (selectedBuildItem) {
+                attemptBuild(); 
+            } else {
+                const { gx, gy } = getGridFromMouse();
+                
+                const modIndex = installedModules.findIndex(m => 
+                    gx >= m.x && gx < m.x + m.w && 
+                    gy >= m.y && gy < m.y + m.h
+                );
+
+                if (modIndex !== -1) {
+                    const mod = installedModules[modIndex];
+                    movingOriginalState = { ...mod }; 
+                    installedModules.splice(modIndex, 1);
+                    selectedBuildItem = mod.type;
+                    
+                    // СОХРАНЕНИЕ ПОВОРОТА:
+                    // Если ширина модуля не совпадает с базовой, значит он был повернут
+                    if (mod.w !== getBaseWidth(mod.type)) {
+                        buildRotation = 1;
+                    } else {
+                        buildRotation = 0;
+                    }
+                }
+            }
+        }
+        if (e.button === 2) { 
+            if (typeof isRightMouseDown !== 'undefined') isRightMouseDown = true;
+            attemptDelete(); 
         }
     }
 });
+
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); 
+});
+
 
 function drawInterior() {
     if (isBuildMenuOpen) {
@@ -134,25 +387,42 @@ function drawInterior() {
     ctx.fillStyle = '#262626'; 
     shipTiles.forEach(t => ctx.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE));
 
-    // --- ФИКС БРОНИ (СТЕНЫ И УГЛЫ) ---
+    // АНИМАЦИЯ ОШИБКИ
+    if (detachAnimTimer > 0) {
+        detachAnimTimer--;
+        
+        let intensity = (Math.sin(detachAnimTimer * 0.3) + 1) / 2; 
+        let fade = detachAnimTimer / 100;
+        let alpha = intensity * fade * 0.8 + 0.2; 
+
+        if (detachedTiles.length > 0) {
+            detachedTiles.forEach(t => {
+                drawDiagonalStripes(t.x * TILE_SIZE, t.y * TILE_SIZE, alpha);
+                ctx.strokeStyle = `rgba(255, 0, 0, ${fade})`;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            });
+        }
+        
+        if (detachAnimTimer === 0) detachedTiles = []; 
+    }
+
+    // --- ФИКС БРОНИ ---
     ctx.fillStyle = '#37474f'; 
     const hullThick = TILE_SIZE * 0.35;
     
     shipTiles.forEach(t => {
         const x = t.x * TILE_SIZE, y = t.y * TILE_SIZE;
-        // Проверяем наличие соседей
         const noTop = !getFloor(t.x, t.y - 1);
         const noBottom = !getFloor(t.x, t.y + 1);
         const noLeft = !getFloor(t.x - 1, t.y);
         const noRight = !getFloor(t.x + 1, t.y);
 
-        // Прямые стены
         if (noTop) ctx.fillRect(x - 0.5, y - hullThick, TILE_SIZE + 1, hullThick + 0.5);
         if (noBottom) ctx.fillRect(x - 0.5, y + TILE_SIZE - 0.5, TILE_SIZE + 1, hullThick + 0.5);
         if (noLeft) ctx.fillRect(x - hullThick, y - 0.5, hullThick + 0.5, TILE_SIZE + 1);
         if (noRight) ctx.fillRect(x + TILE_SIZE - 0.5, y - 0.5, hullThick + 0.5, TILE_SIZE + 1);
 
-        // УГЛЫ
         if (noTop && noLeft) ctx.fillRect(x - hullThick, y - hullThick, hullThick + 1, hullThick + 1);
         if (noTop && noRight) ctx.fillRect(x + TILE_SIZE - 0.5, y - hullThick, hullThick + 0.5, hullThick + 1);
         if (noBottom && noLeft) ctx.fillRect(x - hullThick, y + TILE_SIZE - 0.5, hullThick + 1, hullThick + 0.5);
@@ -161,7 +431,6 @@ function drawInterior() {
 
     ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.beginPath(); shipTiles.forEach(t => ctx.strokeRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE)); ctx.stroke();
     
-    // Отрисовка модулей
     installedModules.forEach(mod => {
         if (mod.type === 'engine') drawEngine(mod.x, mod.y, mod.w, mod.h);
         if (mod.type === 'bridge') drawCaptainBridge(mod.x, mod.y, mod.w, mod.h);
@@ -169,29 +438,29 @@ function drawInterior() {
         if (mod.type === 'airlock') drawAirlock(mod.x, mod.y, mod.w, mod.h);
     });
     
-    drawPlayer();
+    if (!isBuildMenuOpen) drawPlayer();
 
-    // Курсор строительства
-    if (isBuildMenuOpen && selectedBuildItem) {
+    if (isBuildMenuOpen) {
         const { gx, gy } = getGridFromMouse();
-        let valid = false, w=1, h=1;
-        if (gx >= 0 && gx < TARGET_COLS && gy >= 0 && gy < TARGET_ROWS) {
-            if (selectedBuildItem === 'basic') valid = canBuildFloor(gx, gy);
-            else { valid = canBuildModule(gx, gy, selectedBuildItem); w = getModuleWidth(selectedBuildItem); h = getModuleHeight(selectedBuildItem); }
+        
+        if (selectedBuildItem) {
+            let valid = false, w=1, h=1;
+            if (gx >= 0 && gx < TARGET_COLS && gy >= 0 && gy < TARGET_ROWS) {
+                if (selectedBuildItem === 'basic') valid = canBuildFloor(gx, gy) && player.hullParts > 0;
+                else { valid = canBuildModule(gx, gy, selectedBuildItem); w = getModuleWidth(selectedBuildItem); h = getModuleHeight(selectedBuildItem); }
+            }
+            ctx.strokeStyle = valid ? '#29b6f6' : '#ef5350'; ctx.fillStyle = valid ? 'rgba(41, 182, 246, 0.3)' : 'rgba(239, 83, 80, 0.3)';
+            ctx.lineWidth = 2; ctx.fillRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE); ctx.strokeRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE);
         }
-        ctx.strokeStyle = valid ? '#29b6f6' : '#ef5350'; ctx.fillStyle = valid ? 'rgba(41, 182, 246, 0.3)' : 'rgba(239, 83, 80, 0.3)';
-        ctx.lineWidth = 2; ctx.fillRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE); ctx.strokeRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE);
     }
 }
 
 function drawHangar() {
     ctx.fillStyle = '#050505'; ctx.fillRect(player.x - canvas.width, player.y - canvas.height, canvas.width*2, canvas.height*2);
     
-    // Пол станции
     ctx.fillStyle = '#18181a'; stationTiles.forEach(t => { ctx.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); });
     ctx.strokeStyle = '#25252a'; ctx.lineWidth = 1; ctx.beginPath(); stationTiles.forEach(t => { ctx.rect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); }); ctx.stroke();
     
-    // Неоновая обводка станции
     ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4; ctx.shadowBlur = 10; ctx.shadowColor = '#00e5ff'; ctx.beginPath();
     const isStationFloor = (x, y) => stationTiles.some(t => t.x === x && t.y === y);
     stationTiles.forEach(t => {
@@ -203,21 +472,25 @@ function drawHangar() {
     });
     ctx.stroke(); ctx.shadowBlur = 0;
 
-    // ЗДЕСЬ УДАЛЕН КОД ОТРИСОВКИ ТЕКСТА НА ПОЛУ
-
     stationModules.forEach(mod => {
         if (mod.type === 'trade_post') {
             const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
             ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
             ctx.strokeStyle = interactables.tradePost.active ? '#00e5ff' : '#00bfa5'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h);
             
-            // Подпись терминала оставляем, это локальный объект
             ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#00bfa5"; ctx.textAlign = "center";
             ctx.fillText("FUEL", x + w/2, y + h/2 - 5); ctx.fillText("TERM", x + w/2, y + h/2 + 15);
         }
+        if (mod.type === 'engineering_terminal') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = interactables.engineering.active ? '#ffca28' : '#ffa000'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h);
+            
+            ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#ffa000"; ctx.textAlign = "center";
+            ctx.fillText("ENG", x + w/2, y + h/2 - 5); ctx.fillText("STATION", x + w/2, y + h/2 + 15);
+        }
     });
     
-    // Рисуем корабль внутри ангара
     ctx.fillStyle = '#455a64'; shipTiles.forEach(t => { ctx.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); });
     ctx.strokeStyle = '#78909c'; ctx.lineWidth = 3; ctx.beginPath();
     shipTiles.forEach(t => {
@@ -247,6 +520,7 @@ function drawPlayer() {
     ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(player.x, player.y, pRad, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.arc(player.x - pRad*0.3, player.y - pRad*0.3, pRad/3, 0, Math.PI*2); ctx.fill();
 }
+
 function drawStorageUnit(gx, gy, wTiles, hTiles) {
     const x = gx * TILE_SIZE; const y = gy * TILE_SIZE; const w = wTiles * TILE_SIZE; const h = hTiles * TILE_SIZE;
     ctx.fillStyle = '#1b1b1b'; ctx.fillRect(x, y, w, h);
@@ -277,14 +551,10 @@ function drawCaptainBridge(gx, gy, wTiles, hTiles) {
     const h = hTiles * TILE_SIZE; 
     const cx = x + w / 2; 
     const cy = y + h / 2;
-
-    // Фон и консоли
     ctx.fillStyle = '#1a2327'; ctx.fillRect(x, y, w, h); 
     ctx.fillStyle = '#263238'; const consoleThick = TILE_SIZE * 0.2;
     ctx.fillRect(x, y, w, consoleThick); ctx.fillRect(x, y + h - consoleThick, w, consoleThick); 
     ctx.fillRect(x, y, consoleThick, h); ctx.fillRect(x + w - consoleThick, y, consoleThick, h);
-
-    // Декоративные "биты"
     ctx.fillStyle = interactables.bridge.active ? '#00e5ff' : '#00838f'; 
     const bit = TILE_SIZE * 0.24; 
     if (wTiles >= 2) { 
@@ -293,17 +563,13 @@ function drawCaptainBridge(gx, gy, wTiles, hTiles) {
             ctx.fillRect(i, y + h - TILE_SIZE * 0.16, bit * 0.5, bit * 0.25); 
         } 
     }
-
     ctx.save(); 
     ctx.translate(cx, cy);
-    
     if (interactables.bridge.active) {
         ctx.shadowBlur = 20; ctx.shadowColor = '#00e5ff'; ctx.strokeStyle = '#00e5ff'; ctx.globalAlpha = 0.9;
         ctx.rotate(time * 0.2); 
-        
         ctx.beginPath(); ctx.arc(0, 0, TILE_SIZE * 0.8, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.stroke();
         ctx.beginPath(); ctx.arc(0, 0, TILE_SIZE * 0.5, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.stroke();
-        
         ctx.fillStyle = '#00e5ff'; 
         ctx.beginPath(); 
         ctx.moveTo(0, -TILE_SIZE * 0.3); 

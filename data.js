@@ -16,11 +16,24 @@ let currentState = STATE_MENU;
 let transition = { active: false, alpha: 0, direction: 1, targetState: null };
 let time = 0;
 
-// Игрок
-const player = { x: 0, y: 0, radius: 0.35, speed: 0.15, color: '#66bb6a', credits: 0.001 };
+// Игрок (hullParts - инвентарь каркаса)
+const player = { x: 0, y: 0, radius: 0.35, speed: 0.15, color: '#66bb6a', credits: 0.1, hullParts: 20 };
 
 // Глобальные состояния
 let isDocked = false; 
+let isSpectrumOpen = false;
+
+// Целеуказание прыжка
+let currentSystemType = 'station';
+let nextJumpTarget = null; 
+let pendingJumpCost = 0;   
+
+// Состояние сканера (для сохранения между закрытиями)
+let spectrumState = {
+    hasScanned: false, // Было ли произведено сканирование
+    signals: [],       // Найденные сигналы
+    lockedIndex: -1    // Индекс выбранного
+};
 
 // Управление
 const inputs = { up: false, down: false, left: false, right: false };
@@ -32,7 +45,8 @@ const interactables = {
     bridge: { active: false }, 
     storage: { active: false }, 
     airlock: { active: false }, 
-    tradePost: { active: false, x: 0, y: 0 } 
+    tradePost: { active: false, x: 0, y: 0 },
+    engineering: { active: false, x: 0, y: 0 } // Новый терминал
 };
 
 function updateCurrencyUI() {

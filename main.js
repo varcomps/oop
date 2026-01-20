@@ -1,9 +1,12 @@
+// Глобальный флаг правой кнопки (для перетаскивания удаления)
+let isRightMouseDown = false;
+
 function initGame() {
     resize();
     updateCurrencyUI();
     initShip();
     initSpace();
-    // Скрываем HUD в главном меню
+    if (window.initSpectrum) initSpectrum(); 
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'none';
 }
@@ -22,7 +25,6 @@ function startGame() {
     currentState = STATE_SHIP; resize();
     document.getElementById('mainMenu').classList.add('hidden');
     setTimeout(() => { document.getElementById('mainMenu').style.display = "none"; }, 800);
-    // Показываем HUD при старте
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'flex';
 }
@@ -30,8 +32,9 @@ function startGame() {
 function startTransition(toState) {
     if (transition.active) return;
     transition.active = true; transition.alpha = 0; transition.direction = 1; transition.targetState = toState;
-    if (isBuildMenuOpen) toggleBuildMenu(); 
+    if (isBuildMenuOpen) tryToggleBuildMenu(); 
     if (isStorageOpen) toggleStorage(false);
+    if (isSpectrumOpen && window.toggleSpectrum) toggleSpectrum(false);
     uiHint.style.display = 'none'; inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
 }
 
@@ -47,15 +50,58 @@ function performStateSwitch() {
         } 
     }
 
-    // Перестановка игрока
+    // ЛОГИКА ТЕЛЕПОРТАЦИИ
+    const airlock = installedModules.find(m => m.type === 'airlock');
+
+    // --- 1. ВЫХОД ИЗ КОРАБЛЯ (На станцию/в космос) ---
     if (currentState === STATE_HANGAR) {
-        const airlock = installedModules.find(m => m.type === 'airlock');
-        if (airlock) { player.x = (airlock.x - 0.5) * TILE_SIZE; player.y = (airlock.y + 0.5) * TILE_SIZE; }
+        if (airlock) { 
+             const isVertical = (airlock.w === 1 && airlock.h === 2);
+             let spawnX = 0;
+             let spawnY = 0;
+
+             if (isVertical) {
+                 // Вертикальный шлюз (1x2):
+                 // Проверяем, есть ли пол корабля СЛЕВА. Если есть -> выходим направо. Иначе налево.
+                 const floorLeft = getFloor(airlock.x - 1, airlock.y) || getFloor(airlock.x - 1, airlock.y + 1);
+                 
+                 if (floorLeft) {
+                     spawnX = airlock.x + 1; // Выход вправо
+                 } else {
+                     spawnX = airlock.x - 1; // Выход влево
+                 }
+
+                 // Устанавливаем координаты
+                 player.x = (spawnX + 0.5) * TILE_SIZE;      // Центр клетки по X
+                 player.y = (airlock.y + 1.0) * TILE_SIZE;   // Середина высоты шлюза (между двумя клетками)
+             } 
+             else {
+                 // Горизонтальный шлюз (2x1):
+                 // Проверяем, есть ли пол корабля СВЕРХУ. Если есть -> выходим вниз. Иначе вверх.
+                 const floorTop = getFloor(airlock.x, airlock.y - 1) || getFloor(airlock.x + 1, airlock.y - 1);
+                 
+                 if (floorTop) {
+                     spawnY = airlock.y + 1; // Выход вниз
+                 } else {
+                     spawnY = airlock.y - 1; // Выход вверх
+                 }
+
+                 // Устанавливаем координаты
+                 player.x = (airlock.x + 1.0) * TILE_SIZE;   // Середина ширины шлюза
+                 player.y = (spawnY + 0.5) * TILE_SIZE;      // Центр клетки по Y
+             }
+        }
     } 
+    // --- 2. ВХОД В КОРАБЛЬ ---
     else if (currentState === STATE_SHIP) {
         if (oldState === STATE_HANGAR) {
-             const airlock = installedModules.find(m => m.type === 'airlock');
-             if (airlock) { player.x = (airlock.x + 1.5) * TILE_SIZE; player.y = (airlock.y + 1) * TILE_SIZE; }
+             // Используем умную функцию входа из ship.js, если она есть
+             if (window.teleportPlayerToInterior) window.teleportPlayerToInterior();
+             else if (airlock) {
+                 // Фолбэк (на всякий случай)
+                 player.x = (airlock.x + 0.5) * TILE_SIZE; 
+                 player.y = (airlock.y + 1.5) * TILE_SIZE; 
+             }
         }
     }
 
@@ -85,6 +131,8 @@ function isWalkable(px, py) {
 
 function update() {
     time += 0.05;
+    if (window.updateSpectrum) updateSpectrum(); 
+    
     if (currentState === STATE_MENU) return;
 
     if (transition.active) {
@@ -95,16 +143,17 @@ function update() {
     }
 
     if (currentState === STATE_SHIP || currentState === STATE_HANGAR) {
+        // Если меню открыто, камера не следит за игроком
         if (!isBuildMenuOpen) { viewOffset.x = canvas.width / 2 - player.x; viewOffset.y = canvas.height / 2 - player.y; }
+        
         let dx = 0, dy = 0; const moveSpeed = player.speed * TILE_SIZE;
-        if (!isBuildMenuOpen && !isStorageOpen) {
+        if (!isBuildMenuOpen && !isStorageOpen && !isSpectrumOpen) {
             if (inputs.up) dy = -moveSpeed; if (inputs.down) dy = moveSpeed;
             if (inputs.left) dx = -moveSpeed; if (inputs.right) dx = moveSpeed;
         }
         if (isWalkable(player.x + dx, player.y)) player.x += dx;
         if (isWalkable(player.x, player.y + dy)) player.y += dy;
 
-        // Взаимодействия
         if (currentState === STATE_SHIP) {
             const bridge = installedModules.find(m => m.type === 'bridge');
             interactables.bridge.active = bridge && Math.hypot(player.x - (bridge.x + bridge.w/2) * TILE_SIZE, player.y - (bridge.y + bridge.h/2) * TILE_SIZE) < TILE_SIZE * 1.5;
@@ -116,20 +165,24 @@ function update() {
             interactables.airlock.active = airlock && Math.hypot(player.x - (airlock.x + airlock.w/2) * TILE_SIZE, player.y - (airlock.y + airlock.h/2) * TILE_SIZE) < TILE_SIZE * 1.5;
 
             let hintText = "";
-            if (interactables.bridge.active) hintText = "<span class='hl'>[ E ]</span> МОСТИК";
+            if (interactables.bridge.active) hintText = "<span class='hl'>[ E ]</span> МОСТИК <span class='hl'>[ M ]</span> СПЕКТР";
             else if (interactables.storage.active) hintText = "<span class='hl'>[ E ]</span> ГРУЗОВОЙ ОТСЕК";
             else if (interactables.airlock.active && isDocked) hintText = "<span class='hl'>[ E ]</span> ВЫХОД НА СТАНЦИЮ";
             else if (interactables.airlock.active && !isDocked) hintText = "<span style='color:red'>ШЛЮЗ ЗАБЛОКИРОВАН (НЕТ СТЫКОВКИ)</span>";
-            if (!isBuildMenuOpen && !isStorageOpen) uiHint.innerHTML = hintText; else uiHint.innerHTML = "";
+            if (!isBuildMenuOpen && !isStorageOpen && !isSpectrumOpen) uiHint.innerHTML = hintText; else uiHint.innerHTML = "";
         } else {
              const airlock = installedModules.find(m => m.type === 'airlock');
              let nearShip = airlock && Math.hypot(player.x - (airlock.x + airlock.w/2) * TILE_SIZE, player.y - (airlock.y + airlock.h/2) * TILE_SIZE) < TILE_SIZE * 2.5;
              const trade = stationModules.find(m => m.type === 'trade_post');
              interactables.tradePost.active = trade && Math.hypot(player.x - (trade.x + trade.w/2) * TILE_SIZE, player.y - (trade.y + trade.h/2) * TILE_SIZE) < TILE_SIZE * 2;
              
+             const eng = stationModules.find(m => m.type === 'engineering_terminal');
+             interactables.engineering.active = eng && Math.hypot(player.x - (eng.x + eng.w/2) * TILE_SIZE, player.y - (eng.y + eng.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+
              if (!isStorageOpen) {
                  if (nearShip) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРНУТЬСЯ НА КОРАБЛЬ";
                  else if (interactables.tradePost.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОРГОВЛЯ";
+                 else if (interactables.engineering.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ИНЖЕНЕРНЫЙ ТЕРМИНАЛ";
                  else {
                      let roomName = "СТАНЦИЯ";
                      const gx = Math.floor(player.x / TILE_SIZE);
@@ -153,19 +206,40 @@ function update() {
         }
         mapShip.vx *= mapShip.friction; mapShip.vy *= mapShip.friction;
         mapShip.x += mapShip.vx; mapShip.y += mapShip.vy;
-        if (mapShip.x < 0) mapShip.x = canvas.width; if (mapShip.x > canvas.width) mapShip.x = 0;
-        if (mapShip.y < 0) mapShip.y = canvas.height; if (mapShip.y > canvas.height) mapShip.y = 0;
+        
+        // --- ГРАНИЦЫ КАРТЫ (ВЫТАЛКИВАНИЕ) ---
+        // Если вылетаем за левый край
+        if (mapShip.x < 0) { 
+            mapShip.x = 0; 
+            mapShip.vx = -mapShip.vx * 0.5; // Отскок с потерей скорости
+        }
+        // За правый край
+        if (mapShip.x > canvas.width) { 
+            mapShip.x = canvas.width; 
+            mapShip.vx = -mapShip.vx * 0.5; 
+        }
+        // За верхний край
+        if (mapShip.y < 0) { 
+            mapShip.y = 0; 
+            mapShip.vy = -mapShip.vy * 0.5; 
+        }
+        // За нижний край
+        if (mapShip.y > canvas.height) { 
+            mapShip.y = canvas.height; 
+            mapShip.vy = -mapShip.vy * 0.5; 
+        }
 
         const dist = Math.hypot(mapShip.x - station.x, mapShip.y - station.y);
         if (isDocked) {
             dockBtn.style.display = 'block'; dockBtn.innerText = "UNDOCK [F]"; dockBtn.style.color = "#ff5252"; dockBtn.style.borderColor = "#ff5252";
-            uiHint.innerHTML = "СТЫКОВКА ЗАВЕРШЕНА. <span class='hl'>[ F ]</span> ЧТОБЫ ОТСТЫКОВАТЬСЯ";
-        } else if (dist < 100 && !isWarping) {
+            uiHint.innerHTML = "в ангаре. <span class='hl'>[ F ]</span> чтобы вылететь";
+        } else if (currentSystemType === 'station' && dist < 100 && !isWarping) {
             dockBtn.style.display = 'block'; dockBtn.innerText = "DOCK [F]"; dockBtn.style.color = "#00e5ff"; dockBtn.style.borderColor = "#00e5ff";
-            uiHint.innerHTML = "ОРБИТА СТАНЦИИ. <span class='hl'>[ F ]</span> или КНОПКА для стыковки";
+            uiHint.innerHTML = "доступна стыковка. <span class='hl'>[ F ]</span> для стыковки";
         } else {
             dockBtn.style.display = 'none';
-            uiHint.innerHTML = "ПОЛЕТ: <span class='hl'>WASD</span> Двигатели, <span class='hl'>[ E ]</span> Встать с кресла";
+            if (currentSystemType === null) uiHint.innerHTML = "ПУСТОЙ СЕКТОР";
+            else uiHint.innerHTML = "ПОЛЕТ: <span class='hl'>WASD</span> Двигатели, <span class='hl'>[ E ]</span> Встать с кресла";
         }
     }
 }
@@ -180,15 +254,24 @@ function draw() {
 }
 
 // ОБРАБОТКА ВВОДА
-canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; if (isMouseDown && selectedBuildItem === 'basic') attemptBuild(); });
-canvas.addEventListener('mouseup', () => { isMouseDown = false; });
-canvas.addEventListener('mouseleave', () => { isMouseDown = false; });
+canvas.addEventListener('mousemove', e => { 
+    mouseX = e.clientX; mouseY = e.clientY; 
+    
+    // Поддержка "рисования" и "стирания" зажатой кнопкой
+    if (currentState === STATE_SHIP && isBuildMenuOpen) {
+        if (isMouseDown && selectedBuildItem === 'basic') attemptBuild();
+        if (isRightMouseDown) attemptDelete();
+    }
+});
+
+canvas.addEventListener('mouseup', () => { isMouseDown = false; isRightMouseDown = false; });
+canvas.addEventListener('mouseleave', () => { isMouseDown = false; isRightMouseDown = false; });
 
 window.addEventListener('keydown', (e) => {
     if (transition.active) return;
     if (currentState === STATE_MENU) return;
     
-    // ЛОГИКА СКЛАДА (E, R, ESC)
+    // ЛОГИКА СКЛАДА
     if (isStorageOpen) {
         if (e.code === 'Escape') {
             if (holdingItemData) {
@@ -205,11 +288,25 @@ window.addEventListener('keydown', (e) => {
         return;
     }
 
+    if (isSpectrumOpen) {
+        if (e.code === 'Escape' || e.code === 'KeyM') { toggleSpectrum(false); return; }
+        return; 
+    }
+
     if (e.code === 'Escape') {
         if (selectedBuildItem) { if (movingOriginalState) { installedModules.push(movingOriginalState); movingOriginalState = null; } clearCursor(); return; }
-        if (isBuildMenuOpen) { toggleBuildMenu(); return; }
+        
+        if (isBuildMenuOpen) { 
+            // Пытаемся закрыть. Если ошибок нет - переходим в ангар
+            if (tryToggleBuildMenu()) {
+                currentState = STATE_HANGAR; 
+                viewOffset.x = canvas.width / 2 - player.x;
+                viewOffset.y = canvas.height / 2 - player.y;
+            }
+            return; 
+        }
     }
-    if (e.code === 'KeyB') { if (currentState === STATE_SHIP) toggleBuildMenu(); return; }
+    
     if (e.code === 'KeyF' && currentState === STATE_MAP && dockBtn.style.display === 'block') { handleDockingInteraction(); return; }
     if (isBuildMenuOpen) { 
         if (e.code === 'KeyR' && selectedBuildItem && selectedBuildItem !== 'basic') { if (selectedBuildItem === 'engine') return; buildRotation = buildRotation === 0 ? 1 : 0; }
@@ -221,6 +318,11 @@ window.addEventListener('keydown', (e) => {
         case 'KeyS': case 'ArrowDown': inputs.down = true; break;
         case 'KeyA': case 'ArrowLeft': inputs.left = true; break;
         case 'KeyD': case 'ArrowRight': inputs.right = true; break;
+        case 'KeyM': 
+            if (currentState === STATE_SHIP && interactables.bridge.active) {
+                toggleSpectrum(true);
+            }
+            break;
         case 'KeyE':
             if (currentState === STATE_SHIP) {
                 if (interactables.bridge.active) startTransition(STATE_MAP);
@@ -232,6 +334,12 @@ window.addEventListener('keydown', (e) => {
                  const airlock = installedModules.find(m => m.type === 'airlock');
                  if (airlock && Math.hypot(player.x - (airlock.x+airlock.w/2)*TILE_SIZE, player.y - (airlock.y+airlock.h/2)*TILE_SIZE) < TILE_SIZE*2.5) startTransition(STATE_SHIP);
                  if (interactables.tradePost.active) toggleStorage(true, true);
+                 
+                 // Вход в режим строительства
+                 if (interactables.engineering.active) {
+                     currentState = STATE_SHIP; 
+                     tryToggleBuildMenu(); 
+                 }
             }
             break;
     }

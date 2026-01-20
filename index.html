@@ -10,7 +10,7 @@
         canvas { display: block; background-color: #050505; cursor: crosshair; }
 
         /* UI: ВАЛЮТА И ТОПЛИВО */
-        #hud-top-left { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 150; pointer-events: none; }
+        #hud-top-left { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 150; pointer-events: none; transition: left 0.3s; }
         
         .hud-display { font-family: 'Orbitron', sans-serif; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px rgba(0,0,0,0.5); display: flex; align-items: center; }
         .currency-text { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
@@ -53,7 +53,6 @@
             pointer-events: none; 
             z-index: 20; 
             box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); 
-            /* transition удален для мгновенного перемещения */
         }
 
         .shop-item-btn { width: 100%; height: 40px; background: #1a1a1a; border: 1px solid #333; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; cursor: grab; color: #999; transition: 0.2s; font-family: 'Roboto', sans-serif; font-size: 11px; user-select: none; }
@@ -75,10 +74,7 @@
             height: 80px; width: 250px; 
         }
         .jump-btn:hover:not(:disabled) { background: rgba(60, 0, 0, 0.9); box-shadow: 0 0 25px rgba(255, 82, 82, 0.5); }
-        
-        /* ИСПРАВЛЕНИЕ: Добавлен !important для цвета рамки в отключенном состоянии */
         .jump-btn:disabled { border-color: #444 !important; color: #555; background: #111; cursor: not-allowed; box-shadow: none; }
-        
         .btn-sub { font-size: 10px; opacity: 0.7; font-weight: normal; margin-top: 5px; }
 
         #dockBtn { 
@@ -94,25 +90,136 @@
         #chargeBarContainer { width: 350px; height: 6px; background: #111; display: none; border: 1px solid #333; }
         #chargeBar { width: 0%; height: 100%; background: #00e5ff; box-shadow: 0 0 15px #00e5ff; transition: width 0.1s linear; }
 
+        /* UI: СПЕКТРАЛЬНАЯ ЛОКАЛИЗАЦИЯ */
+        #spectrumUI { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 5, 8, 0.95); z-index: 180; flex-direction: column; align-items: center; justify-content: center; }
+        .sp-frame { position: relative; width: 800px; height: 600px; border: 1px solid #444; background: #000; box-shadow: 0 0 50px rgba(0,0,0,1); display: flex; flex-direction: column; }
+        .sp-header { padding: 15px; background: #111; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .sp-title { font-family: 'Orbitron', sans-serif; color: #7c4dff; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(124, 77, 255, 0.5); }
+        .sp-canvas-container { position: relative; width: 100%; height: 480px; background: #050505; overflow: hidden; border-bottom: 1px solid #333; cursor: crosshair; }
+        #spectrumCanvas { width: 100%; height: 100%; }
+        
+        .sp-footer { display: flex; height: 60px; background: #0b0b0d; align-items: center; padding: 0 20px; justify-content: space-between; }
+        .sp-status { font-family: 'Orbitron', monospace; color: #00e676; font-size: 14px; letter-spacing: 1px; }
+        .sp-scan-btn { 
+            background: #7c4dff; color: #fff; border: none; padding: 10px 30px; 
+            font-family: 'Orbitron', sans-serif; font-size: 14px; cursor: pointer; 
+            box-shadow: 0 0 10px rgba(124, 77, 255, 0.3); transition: 0.2s; 
+        }
+        .sp-scan-btn:hover { background: #9575cd; box-shadow: 0 0 20px rgba(124, 77, 255, 0.6); }
+        .sp-scan-btn:disabled { background: #333; color: #555; cursor: not-allowed; box-shadow: none; }
+        
+        .sp-overlay-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.1); font-size: 80px; font-family: 'Orbitron'; pointer-events: none; }
+
         /* UI: БИЛД МЕНЮ */
-        #buildMenu { display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 500px; background: rgba(15, 15, 20, 0.95); border: 1px solid #444; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.9); z-index: 100; flex-direction: column; overflow: hidden; }
+        #buildMenu { 
+            display: flex;
+            position: absolute; 
+            top: 0; bottom: 0; 
+            left: -200px; 
+            width: 200px;
+            background: #0f0f11;
+            border-right: 1px solid #333;
+            box-shadow: 5px 0 30px rgba(0,0,0,0.8);
+            z-index: 200; 
+            flex-direction: column; 
+            overflow: visible; 
+            transition: left 0.3s cubic-bezier(0.1, 0.7, 0.1, 1); 
+        }
+        
+        #buildMenu.slide-in { left: 0; }
+        
+        /* Прячем меню полностью, если не в режиме корабля (добавляется JS) */
+        #buildMenu.hidden-state { display: none !important; }
+
+        /* ТРЕУГОЛЬНИКИ (РУЧКА) */
+        .build-handle-strip {
+            position: absolute;
+            top: 0;
+            bottom: 0; 
+            right: -30px; /* Отступ от панели */
+            width: 20px;
+            display: none; /* ИЗМЕНЕНИЕ: Скрыто по умолчанию */
+            flex-direction: column;
+            justify-content: space-evenly; /* Равномерно сверху донизу */
+            align-items: center;
+            pointer-events: none; 
+            padding: 20px 0;
+        }
+
+        .handle-tri {
+            width: 0;
+            height: 0;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-left: 12px solid #00e5ff; /* Синий треугольник вправо */
+            /* Без анимаций, без рамок */
+        }
+
+
+        .build-header { padding: 15px; border-bottom: 1px solid #333; background: #141416; }
+        .build-title { font-family: 'Orbitron'; font-size: 16px; color: #00e5ff; letter-spacing: 1px; }
+
         .tabs { display: flex; background: #111; border-bottom: 1px solid #333; }
-        .tab-btn { flex: 1; padding: 12px; background: transparent; border: none; color: #666; font-family: 'Orbitron', sans-serif; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .tab-btn { flex: 1; padding: 10px 5px; background: transparent; border: none; color: #666; font-family: 'Orbitron', sans-serif; font-size: 10px; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: #00e5ff; border-bottom: 2px solid #00e5ff; background: #1a1a1a; }
-        .items-container { padding: 20px; display: flex; gap: 15px; justify-content: center; min-height: 90px; }
-        .category-group { display: none; gap: 15px; width: 100%; justify-content: center; }
+        
+        .items-container { padding: 5px; display: flex; flex-direction: column; gap: 5px; overflow-y: hidden; flex: 1; }
+        .category-group { display: none; flex-direction: column; gap: 5px; width: 100%; }
         .category-group.visible { display: flex; }
-        .module-item { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 80px; height: 80px; background: #252525; border: 1px solid #3a3a3a; border-radius: 6px; color: #bbb; cursor: pointer; transition: all 0.2s; }
-        .module-item.active { background: #004d40; color: #80cbc4; border-color: #00bcd4; }
-        .mod-name { font-size: 11px; margin-bottom: 5px; font-weight: bold; text-transform: uppercase; }
-        .key-hint { color: #666; font-size: 10px; }
+        
+        /* Элементы списка в сайдбаре - КОМПАКТНЫЙ РЕЖИМ */
+        .module-item { 
+            display: flex; flex-direction: row; align-items: center; justify-content: flex-start;
+            width: 100%; height: 40px; 
+            padding: 0 8px;
+            background: #1e1e20; border: 1px solid #333; border-radius: 4px; 
+            color: #ccc; cursor: pointer; transition: all 0.2s; box-sizing: border-box;
+        }
+        .module-item:hover { background: #252528; border-color: #555; }
+        .module-item.active { background: #004d40; color: #fff; border-color: #00bcd4; }
+        
+        .mod-icon { width: 22px; height: 22px; background: #333; border: 1px solid #444; margin-right: 8px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #666; }
+        .mod-info { display: flex; flex-direction: column; flex: 1; }
+        .mod-name { font-size: 11px; font-weight: bold; text-transform: uppercase; }
 
         #ui-hint { position: absolute; bottom: 25px; width: 100%; text-align: center; color: #888; font-size: 1.3rem; pointer-events: none; text-shadow: 0 2px 5px black; font-family: 'Orbitron', sans-serif; transition: bottom 0.3s; }
-        #ui-hint.shifted { bottom: 200px; }
         .hl { color: #fff; font-weight: bold; }
+        
+        .count-badge { font-family: 'Orbitron'; font-size: 11px; color: #ffd700; margin-left: auto; }
     </style>
 </head>
 <body>
+
+<div id="buildMenu">
+    <div class="build-handle-strip">
+        <div class="handle-tri"></div><div class="handle-tri"></div><div class="handle-tri"></div>
+        <div class="handle-tri"></div><div class="handle-tri"></div><div class="handle-tri"></div>
+        <div class="handle-tri"></div><div class="handle-tri"></div><div class="handle-tri"></div>
+        <div class="handle-tri"></div><div class="handle-tri"></div><div class="handle-tri"></div>
+    </div>
+
+    <div class="build-header">
+        <div class="build-title">ENGINEERING</div>
+    </div>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('structure')">СТРУКТУРА</button>
+        <button class="tab-btn" onclick="switchTab('modules')">МОДУЛИ</button>
+    </div>
+    <div class="items-container">
+        <div id="cat-structure" class="category-group visible">
+            <div class="module-item" onclick="selectModule('basic')">
+                <div class="mod-icon">STR</div>
+                <div class="mod-info">
+                    <span class="mod-name">Каркас</span>
+                </div>
+                <span class="count-badge" id="hullCountDisplay">x20</span>
+            </div>
+        </div>
+        <div id="cat-modules" class="category-group">
+            <div style="color: #555; font-size: 10px; text-align: center; margin-top: 10px;">НЕТ ЧЕРТЕЖЕЙ</div>
+        </div>
+    </div>
+</div>
 
 <div id="hud-top-left">
     <div class="hud-display currency-text" id="currencyDisplay">
@@ -125,6 +232,23 @@
 
 <div id="mainMenu">
     <button class="start-btn" onclick="startGame()"></button>
+</div>
+
+<div id="spectrumUI">
+    <div class="sp-frame">
+        <div class="sp-header">
+            <span class="sp-title">SPECTRUM LOCALIZATION</span>
+            <span class="close-btn" onclick="toggleSpectrum(false)">ЗАКРЫТЬ [ESC]</span>
+        </div>
+        <div class="sp-canvas-container">
+            <canvas id="spectrumCanvas"></canvas>
+            <div class="sp-overlay-text">SCANNER</div>
+        </div>
+        <div class="sp-footer">
+            <div class="sp-status" id="spStatus">STATUS: STANDBY</div>
+            <button id="btnScan" class="sp-scan-btn" onclick="startScanner()">INITIATE SCAN</button>
+        </div>
+    </div>
 </div>
 
 <div id="storageUI">
@@ -154,34 +278,6 @@
     <div id="chargeBarContainer"><div id="chargeBar"></div></div>
 </div>
 
-<div id="buildMenu">
-    <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('structure')">СТРУКТУРА</button>
-        <button class="tab-btn" onclick="switchTab('modules')">МОДУЛИ</button>
-    </div>
-    <div class="items-container">
-        <div id="cat-structure" class="category-group visible">
-            <button class="module-item" onclick="selectModule('basic')">
-                <span class="mod-name">Пол</span><span class="key-hint">1x1 [Drag]</span>
-            </button>
-        </div>
-        <div id="cat-modules" class="category-group">
-            <button class="module-item" onclick="selectModule('engine')">
-                <span class="mod-name">Двигатель</span><span class="key-hint">2x2 [FIX]</span>
-            </button>
-            <button class="module-item" onclick="selectModule('bridge')">
-                <span class="mod-name">Мостик</span><span class="key-hint">2x2 [R]</span>
-            </button>
-            <button class="module-item" onclick="selectModule('storage')">
-                <span class="mod-name">Склад</span><span class="key-hint">2x2 [R]</span>
-            </button>
-            <button class="module-item" onclick="selectModule('airlock')">
-                <span class="mod-name">Шлюз</span><span class="key-hint">1x2 [R]</span>
-            </button>
-        </div>
-    </div>
-</div>
-
 <div id="ui-hint"></div>
 <canvas id="gameCanvas"></canvas>
 
@@ -189,6 +285,7 @@
 <script src="storage.js"></script>
 <script src="ship.js"></script>
 <script src="space.js"></script>
+<script src="spectrum.js"></script> 
 <script src="main.js"></script>
 
 </body>
