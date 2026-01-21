@@ -522,28 +522,184 @@ function drawPlayer() {
 }
 
 function drawStorageUnit(gx, gy, wTiles, hTiles) {
-    const x = gx * TILE_SIZE; const y = gy * TILE_SIZE; const w = wTiles * TILE_SIZE; const h = hTiles * TILE_SIZE;
-    ctx.fillStyle = '#1b1b1b'; ctx.fillRect(x, y, w, h);
-    const boxW = (w - 12) / 2; const boxH = (h - 12) / 2;
-    for (let i=0; i<2; i++) for (let j=0; j<2; j++) {
-        const bx = x + 4 + i*(boxW+4); const by = y + 4 + j*(boxH+4);
-        ctx.fillStyle = '#3e2723'; ctx.fillRect(bx, by, boxW, boxH);
-        ctx.fillStyle = '#4e342e'; ctx.fillRect(bx+2, by+2, boxW-4, boxH-4);
-        ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx+2, by+2); ctx.lineTo(bx+boxW-2, by+boxH-2); ctx.moveTo(bx+boxW-2, by+2); ctx.lineTo(bx+2, by+boxH-2); ctx.stroke();
+    const x = gx * TILE_SIZE; 
+    const y = gy * TILE_SIZE; 
+    const w = wTiles * TILE_SIZE; 
+    const h = hTiles * TILE_SIZE;
+    
+    // -- ОСНОВА (Сейф) --
+    // Темный тяжелый металл
+    ctx.fillStyle = '#101214'; 
+    ctx.fillRect(x, y, w, h);
+    
+    // Бронированные пластины
+    ctx.fillStyle = '#263238';
+    const border = 4;
+    ctx.fillRect(x, y, w, border); // Верх
+    ctx.fillRect(x, y + h - border, w, border); // Низ
+    ctx.fillRect(x, y, border, h); // Лево
+    ctx.fillRect(x + w - border, y, border, h); // Право
+
+    // Лицевая панель (рифленая)
+    ctx.fillStyle = '#1c2126';
+    const innerPad = 10;
+    ctx.fillRect(x + innerPad, y + innerPad, w - innerPad*2, h - innerPad*2);
+    
+    // Замки/Ручки
+    ctx.fillStyle = '#455a64';
+    ctx.fillRect(x + w/2 - 2, y + innerPad + 5, 4, h - innerPad*2 - 10);
+    
+    // Индикатор (красный/зеленый)
+    ctx.fillStyle = interactables.storage.active ? '#00e676' : '#ff1744';
+    ctx.beginPath(); ctx.arc(x + w - 15, y + 15, 3, 0, Math.PI*2); ctx.fill();
+
+    // -- ГОЛОГРАММА (появляется при активации) --
+    if (interactables.storage.active) {
+        // Базовый альфа-канал для пульсации
+        const alpha = (Math.sin(time * 3) + 1) / 2 * 0.3 + 0.2;
+        
+        ctx.save();
+        ctx.strokeStyle = `rgba(0, 229, 255, ${alpha + 0.2})`;
+        ctx.fillStyle = `rgba(0, 229, 255, ${alpha * 0.3})`;
+        ctx.lineWidth = 1.5;
+        
+        const cx = x + w/2;
+        const cy = y + h/2;
+        const lift = Math.sin(time * 1.5) * 4; // Плавное парение вверх-вниз
+
+        // Квадрат 1: Самый большой, вращается медленно
+        ctx.save();
+        ctx.translate(cx, cy - 20 + lift);
+        ctx.rotate(time * 0.5);
+        const sz1 = TILE_SIZE * 0.7;
+        ctx.beginPath(); ctx.rect(-sz1/2, -sz1/2, sz1, sz1); ctx.stroke();
+        // Уголки
+        ctx.fillStyle = '#00e5ff';
+        ctx.fillRect(-sz1/2 - 2, -sz1/2 - 2, 4, 4);
+        ctx.fillRect(sz1/2 - 2, sz1/2 - 2, 4, 4);
+        ctx.fillRect(-sz1/2 - 2, sz1/2 - 2, 4, 4);
+        ctx.fillRect(sz1/2 - 2, -sz1/2 - 2, 4, 4);
+        ctx.restore();
+
+        // Квадрат 2: Поменьше, вращается быстрее в другую сторону
+        ctx.save();
+        ctx.translate(cx, cy - 35 + lift);
+        ctx.rotate(-time * 1.2);
+        const sz2 = TILE_SIZE * 0.45;
+        ctx.strokeStyle = `rgba(0, 229, 255, ${alpha + 0.4})`; // Ярче
+        ctx.beginPath(); ctx.rect(-sz2/2, -sz2/2, sz2, sz2); ctx.stroke(); ctx.fill();
+        ctx.restore();
+
+        // Квадрат 3: Статичный, верхний "экран"
+        ctx.save();
+        ctx.translate(cx, cy - 50 + lift);
+        const sz3 = TILE_SIZE * 0.2;
+        ctx.fillStyle = '#00e5ff';
+        ctx.beginPath(); ctx.rect(-sz3/2, -sz3/2, sz3, sz3); ctx.fill();
+        ctx.restore();
+
+        // Лучи проектора снизу
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(0, 229, 255, 0.1)`;
+        ctx.moveTo(x + 20, y + 20); ctx.lineTo(cx, cy - 20 + lift);
+        ctx.moveTo(x + w - 20, y + 20); ctx.lineTo(cx, cy - 20 + lift);
+        ctx.stroke();
+
+        ctx.restore();
     }
-    ctx.strokeStyle = interactables.storage.active ? '#00e5ff' : '#333'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
 }
+
 function drawEngine(gx, gy, wTiles, hTiles) {
-    const x = gx * TILE_SIZE; const y = gy * TILE_SIZE; const w = wTiles * TILE_SIZE; const h = hTiles * TILE_SIZE;
-    ctx.fillStyle = '#121212'; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = '#1c1c1c'; const ribW = w * 0.15; ctx.fillRect(x, y, ribW, h); ctx.fillRect(x + w - ribW, y, ribW, h);
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 1; for(let i = y; i < y+h; i+=10) { ctx.beginPath(); ctx.moveTo(x, i); ctx.lineTo(x+ribW, i); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x+w-ribW, i); ctx.lineTo(x+w, i); ctx.stroke(); }
-    const coreX = x + ribW; const coreW = w - ribW*2; ctx.fillStyle = '#0d1117'; ctx.fillRect(coreX, y, coreW, h);
-    const pulse = (Math.sin(time * 0.5) + 1) / 2;
-    const grad = ctx.createLinearGradient(x, y, x, y+h); grad.addColorStop(0, `rgba(0, 100, 255, ${0.4 + pulse*0.2})`); grad.addColorStop(0.5, `rgba(0, 255, 255, ${0.8 + pulse*0.2})`); grad.addColorStop(1, '#fff');
-    ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(coreX + 5, y + 10); ctx.lineTo(x + w - ribW - 5, y + 10); ctx.lineTo(x + w - ribW - 10, y + h - 10); ctx.lineTo(coreX + 10, y + h - 10); ctx.fill();
-    ctx.strokeStyle = '#546e7a'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
+    const x = gx * TILE_SIZE; 
+    const y = gy * TILE_SIZE; 
+    const w = wTiles * TILE_SIZE; 
+    const h = hTiles * TILE_SIZE;
+
+    // -- КОРПУС --
+    // Массивный, тяжелый блок
+    ctx.fillStyle = '#191919'; // Почти черный
+    ctx.fillRect(x, y, w, h);
+    
+    // Боковые усилители (ребристые)
+    ctx.fillStyle = '#2d2d2d';
+    const sideW = w * 0.15;
+    ctx.fillRect(x, y, sideW, h);
+    ctx.fillRect(x + w - sideW, y, sideW, h);
+    
+    // Решетки охлаждения на боках
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    for(let i = y + 5; i < y + h; i += 6) {
+        ctx.beginPath(); ctx.moveTo(x + 2, i); ctx.lineTo(x + sideW - 2, i); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + w - sideW + 2, i); ctx.lineTo(x + w - 2, i); ctx.stroke();
+    }
+
+    // Центральная часть (Механика)
+    const cx = x + w / 2;
+    // Трубки
+    ctx.strokeStyle = '#546e7a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, y + 10); ctx.lineTo(cx - 10, y + h - 20);
+    ctx.moveTo(cx + 10, y + 10); ctx.lineTo(cx + 10, y + h - 20);
+    ctx.stroke();
+
+    // -- СОПЛО --
+    // Сложная форма (Кольца)
+    const nozzleY = y + h - TILE_SIZE * 0.4;
+    const nozzleMaxW = w * 0.6;
+    
+    // Внешнее кольцо
+    ctx.fillStyle = '#263238';
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleY, nozzleMaxW/2, TILE_SIZE * 0.15, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Внутреннее кольцо (ближе к огню)
+    ctx.fillStyle = '#10151a';
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleY + 5, nozzleMaxW/2.5, TILE_SIZE * 0.12, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // -- ЯДРО И ВЫХЛОП --
+    const pulse = (Math.sin(time * 15) + 1) / 2; // Очень быстрое мерцание
+
+    // Само ядро (внутри корпуса)
+    const coreGrad = ctx.createRadialGradient(cx, y + h/2, 5, cx, y + h/2, 25);
+    coreGrad.addColorStop(0, '#fff');
+    coreGrad.addColorStop(0.4, 'rgba(0, 229, 255, 1)');
+    coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = coreGrad;
+    // Рисуем свечение через "щели" в центре
+    ctx.fillRect(cx - 5, y + 20, 10, h - 50);
+
+    // Плазменный хвост
+    const tailW = nozzleMaxW * 0.4;
+    const tailLen = TILE_SIZE * (0.8 + pulse * 0.2);
+    
+    const flameGrad = ctx.createLinearGradient(cx, nozzleY, cx, nozzleY + tailLen);
+    flameGrad.addColorStop(0, '#fff');
+    flameGrad.addColorStop(0.3, '#00e5ff');
+    flameGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+
+    ctx.fillStyle = flameGrad;
+    ctx.beginPath();
+    ctx.moveTo(cx - tailW/2, nozzleY + 5);
+    ctx.lineTo(cx + tailW/2, nozzleY + 5);
+    ctx.lineTo(cx, nozzleY + 5 + tailLen);
+    ctx.fill();
+
+    // Искры / Частицы
+    ctx.fillStyle = '#fff';
+    if (Math.random() > 0.5) ctx.fillRect(cx - 5 + Math.random()*10, nozzleY + 10 + Math.random()*20, 2, 2);
+
+    // Контур всего модуля
+    ctx.strokeStyle = '#37474f';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
 }
+
 function drawCaptainBridge(gx, gy, wTiles, hTiles) {
     const x = gx * TILE_SIZE; 
     const y = gy * TILE_SIZE; 

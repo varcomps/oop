@@ -86,12 +86,24 @@ function startScanner() {
     // Генерация сигналов
     const count = Math.floor(Math.random() * 3) + 2; 
     for(let i=0; i<count; i++) {
-        const isSystem = Math.random() > 0.6;
+        const rand = Math.random();
+        let type = 'station';
+        let cost = 0.0001;
+        
+        // --- ШАНС СПАВНА ЧЕРНОЙ ДЫРЫ (РЕДКИЙ) ---
+        if (rand > 0.90) { // 10% шанс
+            type = 'black_hole';
+            cost = 0.01;
+        } else if (rand > 0.6) {
+            type = 'system';
+            cost = 0.001;
+        }
+
         spectrumState.signals.push({
             x: Math.random() * (spCanvas.width - 100) + 50,
             y: Math.random() * (spCanvas.height - 100) + 50,
-            type: isSystem ? 'system' : 'station',
-            cost: isSystem ? 0.001 : 0.0001,
+            type: type,
+            cost: cost,
             revealed: false
         });
     }
@@ -111,8 +123,11 @@ function checkSignalClick(mx, my) {
             nextJumpTarget = s.type;
             pendingJumpCost = s.cost;
 
+            let color = "#00e676";
+            if (s.type === 'black_hole') color = "#d500f9"; // Фиолетовый для ЧД
+
             spStatus.innerHTML = `STATUS: TARGET LOCKED [${s.type.toUpperCase()}] <br> JUMP COST: ${s.cost} SC (PAY ON JUMP)`;
-            spStatus.style.color = "#00e676";
+            spStatus.style.color = color;
             return;
         }
     }
@@ -169,8 +184,11 @@ function updateSpectrum() {
         if (!s.revealed) return;
 
         const isLocked = (index === spectrumState.lockedIndex);
-        const color = s.type === 'system' ? '#ffab00' : '#00e5ff';
         
+        let color = '#00e5ff'; // Station
+        if (s.type === 'system') color = '#ffab00';
+        if (s.type === 'black_hole') color = '#d500f9'; // Фиолетовый
+
         // Точка
         spCtx.fillStyle = color;
         spCtx.shadowBlur = 10; spCtx.shadowColor = color;
@@ -192,16 +210,16 @@ function updateSpectrum() {
             lockAnimFrame += 0.5;
             const size = Math.max(15, 50 - lockAnimFrame * 2);
             
-            spCtx.strokeStyle = '#00e676';
+            spCtx.strokeStyle = color;
             spCtx.lineWidth = 2;
-            spCtx.shadowBlur = 10; spCtx.shadowColor = '#00e676';
+            spCtx.shadowBlur = 10; spCtx.shadowColor = color;
             
             spCtx.beginPath();
             spCtx.strokeRect(s.x - size, s.y - size, size*2, size*2); // Простой квадрат прицела
             spCtx.stroke();
             spCtx.shadowBlur = 0;
 
-            spCtx.fillStyle = '#00e676';
+            spCtx.fillStyle = color;
             spCtx.font = "bold 12px Orbitron";
             spCtx.textAlign = "center";
             spCtx.fillText("LOCKED", s.x, s.y + 40);

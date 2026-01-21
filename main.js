@@ -17,7 +17,11 @@ function resize() {
     const scaleX = canvas.width / TARGET_COLS;
     const scaleY = canvas.height / TARGET_ROWS;
     TILE_SIZE = Math.min(scaleX, scaleY);
-    if (stars.length === 0) generateStars();
+    
+    // ИСПРАВЛЕНИЕ: Проверяем новые слои фона вместо старого массива stars
+    if (window.bgLayers && window.bgLayers.stars.length === 0) {
+        if (window.generateDeepSpace) generateDeepSpace();
+    }
 }
 window.addEventListener('resize', resize);
 
@@ -62,7 +66,6 @@ function performStateSwitch() {
 
              if (isVertical) {
                  // Вертикальный шлюз (1x2):
-                 // Проверяем, есть ли пол корабля СЛЕВА. Если есть -> выходим направо. Иначе налево.
                  const floorLeft = getFloor(airlock.x - 1, airlock.y) || getFloor(airlock.x - 1, airlock.y + 1);
                  
                  if (floorLeft) {
@@ -71,13 +74,11 @@ function performStateSwitch() {
                      spawnX = airlock.x - 1; // Выход влево
                  }
 
-                 // Устанавливаем координаты
-                 player.x = (spawnX + 0.5) * TILE_SIZE;      // Центр клетки по X
-                 player.y = (airlock.y + 1.0) * TILE_SIZE;   // Середина высоты шлюза (между двумя клетками)
+                 player.x = (spawnX + 0.5) * TILE_SIZE;      
+                 player.y = (airlock.y + 1.0) * TILE_SIZE;   
              } 
              else {
                  // Горизонтальный шлюз (2x1):
-                 // Проверяем, есть ли пол корабля СВЕРХУ. Если есть -> выходим вниз. Иначе вверх.
                  const floorTop = getFloor(airlock.x, airlock.y - 1) || getFloor(airlock.x + 1, airlock.y - 1);
                  
                  if (floorTop) {
@@ -86,19 +87,16 @@ function performStateSwitch() {
                      spawnY = airlock.y - 1; // Выход вверх
                  }
 
-                 // Устанавливаем координаты
-                 player.x = (airlock.x + 1.0) * TILE_SIZE;   // Середина ширины шлюза
-                 player.y = (spawnY + 0.5) * TILE_SIZE;      // Центр клетки по Y
+                 player.x = (airlock.x + 1.0) * TILE_SIZE;   
+                 player.y = (spawnY + 0.5) * TILE_SIZE;      
              }
         }
     } 
     // --- 2. ВХОД В КОРАБЛЬ ---
     else if (currentState === STATE_SHIP) {
         if (oldState === STATE_HANGAR) {
-             // Используем умную функцию входа из ship.js, если она есть
              if (window.teleportPlayerToInterior) window.teleportPlayerToInterior();
              else if (airlock) {
-                 // Фолбэк (на всякий случай)
                  player.x = (airlock.x + 0.5) * TILE_SIZE; 
                  player.y = (airlock.y + 1.5) * TILE_SIZE; 
              }
@@ -143,7 +141,6 @@ function update() {
     }
 
     if (currentState === STATE_SHIP || currentState === STATE_HANGAR) {
-        // Если меню открыто, камера не следит за игроком
         if (!isBuildMenuOpen) { viewOffset.x = canvas.width / 2 - player.x; viewOffset.y = canvas.height / 2 - player.y; }
         
         let dx = 0, dy = 0; const moveSpeed = player.speed * TILE_SIZE;
@@ -208,45 +205,38 @@ function update() {
         mapShip.x += mapShip.vx; mapShip.y += mapShip.vy;
         
         // --- ГРАНИЦЫ КАРТЫ (ВЫТАЛКИВАНИЕ) ---
-        // Если вылетаем за левый край
-        if (mapShip.x < 0) { 
-            mapShip.x = 0; 
-            mapShip.vx = -mapShip.vx * 0.5; // Отскок с потерей скорости
-        }
-        // За правый край
-        if (mapShip.x > canvas.width) { 
-            mapShip.x = canvas.width; 
-            mapShip.vx = -mapShip.vx * 0.5; 
-        }
-        // За верхний край
-        if (mapShip.y < 0) { 
-            mapShip.y = 0; 
-            mapShip.vy = -mapShip.vy * 0.5; 
-        }
-        // За нижний край
-        if (mapShip.y > canvas.height) { 
-            mapShip.y = canvas.height; 
-            mapShip.vy = -mapShip.vy * 0.5; 
-        }
+        if (mapShip.x < 0) { mapShip.x = 0; mapShip.vx = -mapShip.vx * 0.5; }
+        if (mapShip.x > canvas.width) { mapShip.x = canvas.width; mapShip.vx = -mapShip.vx * 0.5; }
+        if (mapShip.y < 0) { mapShip.y = 0; mapShip.vy = -mapShip.vy * 0.5; }
+        if (mapShip.y > canvas.height) { mapShip.y = canvas.height; mapShip.vy = -mapShip.vy * 0.5; }
 
-        const dist = Math.hypot(mapShip.x - station.x, mapShip.y - station.y);
+        // --- ИСПРАВЛЕННАЯ ЛОГИКА СТЫКОВКИ ---
+        const inZone = window.isShipInDockingZone ? window.isShipInDockingZone() : false;
+
         if (isDocked) {
             dockBtn.style.display = 'block'; dockBtn.innerText = "UNDOCK [F]"; dockBtn.style.color = "#ff5252"; dockBtn.style.borderColor = "#ff5252";
             uiHint.innerHTML = "в ангаре. <span class='hl'>[ F ]</span> чтобы вылететь";
-        } else if (currentSystemType === 'station' && dist < 100 && !isWarping) {
+        } else if (currentSystemType === 'station' && inZone && !isWarping) {
             dockBtn.style.display = 'block'; dockBtn.innerText = "DOCK [F]"; dockBtn.style.color = "#00e5ff"; dockBtn.style.borderColor = "#00e5ff";
             uiHint.innerHTML = "доступна стыковка. <span class='hl'>[ F ]</span> для стыковки";
         } else {
             dockBtn.style.display = 'none';
             if (currentSystemType === null) uiHint.innerHTML = "ПУСТОЙ СЕКТОР";
-            else uiHint.innerHTML = "ПОЛЕТ: <span class='hl'>WASD</span> Двигатели, <span class='hl'>[ E ]</span> Встать с кресла";
+            else uiHint.innerHTML = "ПОЛЕТ: <span class='hl'>WASD</span> Двигатели, <span class='hl'>[ E ]</span> Встать с кресла <span class='hl'>[ M ]</span> Сканер";
         }
     }
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (currentState === STATE_MENU) drawStars(false);
+    // ИСПРАВЛЕНИЕ: Вызываем новую функцию для фона меню
+    if (currentState === STATE_MENU) {
+         if (window.drawSpaceBackground) drawSpaceBackground(false);
+         else {
+             // Fallback если space.js еще не загрузился
+             ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width, canvas.height);
+         }
+    }
     else if (currentState === STATE_SHIP) { ctx.save(); ctx.translate(viewOffset.x, viewOffset.y); drawInterior(); ctx.restore(); }
     else if (currentState === STATE_HANGAR) { ctx.save(); ctx.translate(viewOffset.x, viewOffset.y); drawHangar(); ctx.restore(); }
     else drawMap();
@@ -257,7 +247,6 @@ function draw() {
 canvas.addEventListener('mousemove', e => { 
     mouseX = e.clientX; mouseY = e.clientY; 
     
-    // Поддержка "рисования" и "стирания" зажатой кнопкой
     if (currentState === STATE_SHIP && isBuildMenuOpen) {
         if (isMouseDown && selectedBuildItem === 'basic') attemptBuild();
         if (isRightMouseDown) attemptDelete();
@@ -271,7 +260,6 @@ window.addEventListener('keydown', (e) => {
     if (transition.active) return;
     if (currentState === STATE_MENU) return;
     
-    // ЛОГИКА СКЛАДА
     if (isStorageOpen) {
         if (e.code === 'Escape') {
             if (holdingItemData) {
@@ -297,7 +285,6 @@ window.addEventListener('keydown', (e) => {
         if (selectedBuildItem) { if (movingOriginalState) { installedModules.push(movingOriginalState); movingOriginalState = null; } clearCursor(); return; }
         
         if (isBuildMenuOpen) { 
-            // Пытаемся закрыть. Если ошибок нет - переходим в ангар
             if (tryToggleBuildMenu()) {
                 currentState = STATE_HANGAR; 
                 viewOffset.x = canvas.width / 2 - player.x;
@@ -319,7 +306,7 @@ window.addEventListener('keydown', (e) => {
         case 'KeyA': case 'ArrowLeft': inputs.left = true; break;
         case 'KeyD': case 'ArrowRight': inputs.right = true; break;
         case 'KeyM': 
-            if (currentState === STATE_SHIP && interactables.bridge.active) {
+            if ((currentState === STATE_SHIP && interactables.bridge.active) || currentState === STATE_MAP) {
                 toggleSpectrum(true);
             }
             break;
@@ -334,8 +321,6 @@ window.addEventListener('keydown', (e) => {
                  const airlock = installedModules.find(m => m.type === 'airlock');
                  if (airlock && Math.hypot(player.x - (airlock.x+airlock.w/2)*TILE_SIZE, player.y - (airlock.y+airlock.h/2)*TILE_SIZE) < TILE_SIZE*2.5) startTransition(STATE_SHIP);
                  if (interactables.tradePost.active) toggleStorage(true, true);
-                 
-                 // Вход в режим строительства
                  if (interactables.engineering.active) {
                      currentState = STATE_SHIP; 
                      tryToggleBuildMenu(); 
