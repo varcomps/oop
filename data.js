@@ -22,6 +22,7 @@ const player = { x: 0, y: 0, radius: 0.35, speed: 0.15, color: '#66bb6a', credit
 // Глобальные состояния
 let isDocked = false; 
 let isSpectrumOpen = false;
+let isMarketOpen = false; 
 
 // Целеуказание прыжка
 let currentSystemType = 'station';
@@ -46,7 +47,8 @@ const interactables = {
     storage: { active: false }, 
     airlock: { active: false }, 
     tradePost: { active: false, x: 0, y: 0 },
-    engineering: { active: false, x: 0, y: 0 } // Новый терминал
+    engineering: { active: false, x: 0, y: 0 },
+    commodities: { active: false, x: 0, y: 0 } 
 };
 
 function updateCurrencyUI() {

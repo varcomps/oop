@@ -39,6 +39,7 @@ function startTransition(toState) {
     if (isBuildMenuOpen) tryToggleBuildMenu(); 
     if (isStorageOpen) toggleStorage(false);
     if (isSpectrumOpen && window.toggleSpectrum) toggleSpectrum(false);
+    if (isMarketOpen && window.toggleMarket) toggleMarket(false);
     uiHint.style.display = 'none'; inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
 }
 
@@ -144,7 +145,7 @@ function update() {
         if (!isBuildMenuOpen) { viewOffset.x = canvas.width / 2 - player.x; viewOffset.y = canvas.height / 2 - player.y; }
         
         let dx = 0, dy = 0; const moveSpeed = player.speed * TILE_SIZE;
-        if (!isBuildMenuOpen && !isStorageOpen && !isSpectrumOpen) {
+        if (!isBuildMenuOpen && !isStorageOpen && !isSpectrumOpen && !isMarketOpen) {
             if (inputs.up) dy = -moveSpeed; if (inputs.down) dy = moveSpeed;
             if (inputs.left) dx = -moveSpeed; if (inputs.right) dx = moveSpeed;
         }
@@ -175,11 +176,15 @@ function update() {
              
              const eng = stationModules.find(m => m.type === 'engineering_terminal');
              interactables.engineering.active = eng && Math.hypot(player.x - (eng.x + eng.w/2) * TILE_SIZE, player.y - (eng.y + eng.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+             
+             const comm = stationModules.find(m => m.type === 'commodities_terminal');
+             interactables.commodities.active = comm && Math.hypot(player.x - (comm.x + comm.w/2) * TILE_SIZE, player.y - (comm.y + comm.h/2) * TILE_SIZE) < TILE_SIZE * 2;
 
-             if (!isStorageOpen) {
+             if (!isStorageOpen && !isMarketOpen) {
                  if (nearShip) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРНУТЬСЯ НА КОРАБЛЬ";
                  else if (interactables.tradePost.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОРГОВЛЯ";
                  else if (interactables.engineering.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ИНЖЕНЕРНЫЙ ТЕРМИНАЛ";
+                 else if (interactables.commodities.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОВАРНЫЙ РЫНОК";
                  else {
                      let roomName = "СТАНЦИЯ";
                      const gx = Math.floor(player.x / TILE_SIZE);
@@ -281,6 +286,11 @@ window.addEventListener('keydown', (e) => {
         return; 
     }
 
+    if (isMarketOpen) {
+        if (e.code === 'Escape' || e.code === 'KeyE') { toggleMarket(false); return; }
+        return; 
+    }
+
     if (e.code === 'Escape') {
         if (selectedBuildItem) { if (movingOriginalState) { installedModules.push(movingOriginalState); movingOriginalState = null; } clearCursor(); return; }
         
@@ -321,6 +331,7 @@ window.addEventListener('keydown', (e) => {
                  const airlock = installedModules.find(m => m.type === 'airlock');
                  if (airlock && Math.hypot(player.x - (airlock.x+airlock.w/2)*TILE_SIZE, player.y - (airlock.y+airlock.h/2)*TILE_SIZE) < TILE_SIZE*2.5) startTransition(STATE_SHIP);
                  if (interactables.tradePost.active) toggleStorage(true, true);
+                 if (interactables.commodities.active) toggleMarket(true);
                  if (interactables.engineering.active) {
                      currentState = STATE_SHIP; 
                      tryToggleBuildMenu(); 
@@ -340,3 +351,70 @@ window.addEventListener('keyup', (e) => {
 initGame();
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 loop();
+
+function drawHangar() {
+    ctx.fillStyle = '#050505'; ctx.fillRect(player.x - canvas.width, player.y - canvas.height, canvas.width*2, canvas.height*2);
+    
+    ctx.fillStyle = '#18181a'; stationTiles.forEach(t => { ctx.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); });
+    ctx.strokeStyle = '#25252a'; ctx.lineWidth = 1; ctx.beginPath(); stationTiles.forEach(t => { ctx.rect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); }); ctx.stroke();
+    
+    ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4; ctx.shadowBlur = 10; ctx.shadowColor = '#00e5ff'; ctx.beginPath();
+    const isStationFloor = (x, y) => stationTiles.some(t => t.x === x && t.y === y);
+    stationTiles.forEach(t => {
+        const x = t.x * TILE_SIZE; const y = t.y * TILE_SIZE;
+        if (!isStationFloor(t.x, t.y - 1)) { ctx.moveTo(x, y); ctx.lineTo(x + TILE_SIZE, y); }
+        if (!isStationFloor(t.x, t.y + 1)) { ctx.moveTo(x, y + TILE_SIZE); ctx.lineTo(x + TILE_SIZE, y + TILE_SIZE); }
+        if (!isStationFloor(t.x - 1, t.y)) { ctx.moveTo(x, y); ctx.lineTo(x, y + TILE_SIZE); }
+        if (!isStationFloor(t.x + 1, t.y)) { ctx.moveTo(x + TILE_SIZE, y); ctx.lineTo(x + TILE_SIZE, y + TILE_SIZE); }
+    });
+    ctx.stroke(); ctx.shadowBlur = 0;
+
+    stationModules.forEach(mod => {
+        if (mod.type === 'trade_post') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = interactables.tradePost.active ? '#00e5ff' : '#00bfa5'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h);
+            
+            ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#00bfa5"; ctx.textAlign = "center";
+            ctx.fillText("FUEL", x + w/2, y + h/2 - 5); ctx.fillText("TERM", x + w/2, y + h/2 + 15);
+        }
+        if (mod.type === 'engineering_terminal') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = interactables.engineering.active ? '#ffca28' : '#ffa000'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h);
+            
+            ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#ffa000"; ctx.textAlign = "center";
+            ctx.fillText("ENG", x + w/2, y + h/2 - 5); ctx.fillText("STATION", x + w/2, y + h/2 + 15);
+        }
+        if (mod.type === 'commodities_terminal') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = interactables.commodities.active ? '#d500f9' : '#aa00ff'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h);
+            
+            ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#e040fb"; ctx.textAlign = "center";
+            ctx.fillText("MARKET", x + w/2, y + h/2 - 5); ctx.fillText("ACCESS", x + w/2, y + h/2 + 15);
+        }
+    });
+    
+    ctx.fillStyle = '#455a64'; shipTiles.forEach(t => { ctx.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); });
+    ctx.strokeStyle = '#78909c'; ctx.lineWidth = 3; ctx.beginPath();
+    shipTiles.forEach(t => {
+        const x = t.x * TILE_SIZE; const y = t.y * TILE_SIZE;
+        if (!getFloor(t.x, t.y - 1)) { ctx.moveTo(x, y); ctx.lineTo(x + TILE_SIZE, y); }
+        if (!getFloor(t.x, t.y + 1)) { ctx.moveTo(x, y + TILE_SIZE); ctx.lineTo(x + TILE_SIZE, y + TILE_SIZE); }
+        if (!getFloor(t.x - 1, t.y)) { ctx.moveTo(x, y); ctx.lineTo(x, y + TILE_SIZE); }
+        if (!getFloor(t.x + 1, t.y)) { ctx.moveTo(x + TILE_SIZE, y); ctx.lineTo(x + TILE_SIZE, y + TILE_SIZE); }
+    });
+    ctx.stroke();
+
+    installedModules.filter(m => m.type === 'engine').forEach(mod => {
+        const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.8)'; ctx.shadowBlur = 15; ctx.shadowColor = '#00e5ff'; ctx.fillRect(x + 5, y + h - TILE_SIZE + 5, w - 10, TILE_SIZE - 10); ctx.shadowBlur = 0;
+    });
+    installedModules.filter(m => m.type === 'airlock').forEach(mod => {
+        const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+        ctx.fillStyle = '#37474f'; ctx.fillRect(x + 5, y + 5, w - 10, h - 10); 
+        ctx.fillStyle = isDocked ? '#00e676' : '#d32f2f'; ctx.beginPath(); ctx.arc(x + w/2, y + h/2, 4, 0, Math.PI*2); ctx.fill();
+    });
+    drawPlayer();
+}

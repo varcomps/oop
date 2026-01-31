@@ -108,6 +108,8 @@ function initSpace() {
     station.x = Math.random() * canvas.width;
     station.y = Math.random() * canvas.height;
     generateStation(); 
+    if(window.initMarket) initMarket(); 
+    if(window.generateStationInventory) generateStationInventory(); 
 }
 
 // --- ГЕНЕРАТОР СИСТЕМ ---
@@ -216,6 +218,13 @@ function generateStation() {
     const reactorSide = reactorSides[Math.floor(Math.random() * reactorSides.length)];
     const reactorRoom = createRoom(hubRoom, reactorSide, 10, 10, "РЕАКТОРНАЯ");
     stationModules.push({ type: 'trade_post', x: reactorRoom.cx - 1, y: reactorRoom.cy - 1, w: 2, h: 2 });
+
+    let marketSides = [0, 1, 2, 3].filter(s => s !== hubRoom.entranceSide && s !== reactorSide);
+    if (marketSides.length > 0) {
+        const marketSide = marketSides[Math.floor(Math.random() * marketSides.length)];
+        const marketRoom = createRoom(hubRoom, marketSide, 12, 10, "ТОРГОВЫЙ СКЛАД");
+        stationModules.push({ type: 'commodities_terminal', x: marketRoom.cx - 1, y: marketRoom.cy - 1, w: 2, h: 2 });
+    }
 }
 
 // --- УПРАВЛЕНИЕ ВАРПОМ ---
@@ -336,6 +345,11 @@ function updateWarpLogic() {
             // Фиксация новой темы
             bgState.currentThemeIdx = bgState.nextThemeIdx;
             bgState.progress = 0;
+
+            if(window.updateGlobalPrices) updateGlobalPrices();
+            if (currentSystemType === 'station' && window.generateStationInventory) {
+                generateStationInventory();
+            }
         }
     }
 }
