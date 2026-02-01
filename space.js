@@ -499,15 +499,58 @@ function drawMap() {
             const sY = cy + (station.y - cy) * parallaxScale;
             
             if (parallaxScale > 0.05 && parallaxScale < 8) {
-                ctx.save(); ctx.translate(sX, sY); ctx.scale(parallaxScale, parallaxScale);
-                ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)'; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
-                ctx.save(); ctx.rotate(time * 0.05); ctx.beginPath(); ctx.arc(0, 0, station.dockingRadius, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+                ctx.save();
+                ctx.translate(sX, sY);
+                ctx.scale(parallaxScale, parallaxScale);
+
+                // --- НОВЫЙ ВИЗУАЛ СТАНЦИИ ---
+                // Медленное вращение станции
+                ctx.rotate(time * 0.05);
+
+                // Кольцо зоны стыковки (еле заметное)
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.15)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 15]);
+                ctx.beginPath(); 
+                ctx.arc(0, 0, station.dockingRadius, 0, Math.PI * 2); 
+                ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.shadowBlur = 10; ctx.shadowColor = '#00e5ff'; ctx.fillStyle = '#000'; ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 3;
-                const iconSize = 25;
-                ctx.beginPath(); ctx.moveTo(0, -iconSize); ctx.lineTo(iconSize, 0); ctx.lineTo(0, iconSize); ctx.lineTo(-iconSize, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
-                ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#00e5ff'; ctx.font = "12px Orbitron"; ctx.textAlign = "center"; ctx.fillText("OUTPOST ALPHA", 0, iconSize + 20); ctx.shadowBlur = 0;
+
+                // Центральное ядро
+                ctx.fillStyle = '#263238'; // Темный металл
+                ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#455a64';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Вращающиеся рукава (3 штуки)
+                const arms = 3;
+                for(let i=0; i<arms; i++) {
+                    ctx.save();
+                    ctx.rotate((Math.PI*2 / arms) * i);
+                    
+                    // Соединительная балка
+                    ctx.fillStyle = '#37474f';
+                    ctx.fillRect(-3, 10, 6, 25);
+                    
+                    // Модуль на конце (солнечная панель/док)
+                    ctx.fillStyle = '#1a2327';
+                    ctx.strokeStyle = '#00bcd4'; // Акцент циана (неон)
+                    ctx.lineWidth = 1;
+                    ctx.fillRect(-8, 35, 16, 10);
+                    ctx.strokeRect(-8, 35, 16, 10);
+
+                    // Огоньки
+                    ctx.fillStyle = Math.sin(time * 2 + i) > 0 ? '#00e676' : '#1b5e20';
+                    ctx.beginPath(); ctx.arc(0, 32, 1.5, 0, Math.PI*2); ctx.fill();
+
+                    ctx.restore();
+                }
+
+                // Центральный маяк (Мигающий)
+                ctx.fillStyle = `rgba(0, 229, 255, ${0.5 + Math.sin(time*3)*0.4})`;
+                ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+
                 ctx.restore();
             }
         }

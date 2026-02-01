@@ -67,6 +67,9 @@ window.renderStorageGrid = function() {
         const div = document.createElement('div');
         div.className = 'grid-item-visual';
         
+        // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: Box Sizing ---
+        div.style.boxSizing = 'border-box'; 
+
         if (item.type === 'fuel') {
             div.classList.add('fuel-style');
             div.innerHTML = '<div class="fuel-charge"></div><span class="fuel-label">F-CELL</span>';
@@ -76,9 +79,9 @@ window.renderStorageGrid = function() {
             div.innerHTML = `<span class="cargo-text">${item.name ? item.name.substring(0,8) : 'CRATE'}</span>`;
         }
         
-        // --- СДВИГ 5px ДЛЯ ВЫРАВНИВАНИЯ ---
-        const step = 47; 
-        const pad = 5; 
+        // Настройки сетки (как в CSS)
+        const step = 47; // 45px cell + 2px gap
+        const pad = 4;   // Соответствует padding: 4px в CSS
         
         div.style.width = (item.w * step - 2) + 'px';
         div.style.height = (item.h * step - 2) + 'px';
@@ -195,8 +198,11 @@ window.handleStorageGridHover = function(e, index, context = 'main') {
     
     activeGhost.style.display = 'block';
     
+    // --- ВАЖНОЕ ИСПРАВЛЕНИЕ ДЛЯ ПРИЗРАКА ---
+    activeGhost.style.boxSizing = 'border-box';
+    
     const stepSize = 47; 
-    const pad = 5; // --- СДВИГ ПРИЗРАКА 5px ---
+    const pad = 4; // Padding 4px
     
     const ghostW = (window.holdingItemData.w * stepSize) - 2; 
     const ghostH = (window.holdingItemData.h * stepSize) - 2;

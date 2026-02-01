@@ -14,6 +14,9 @@ let selectedBuildItem = null;
 let movingOriginalState = null;
 let buildRotation = 0;
 
+// Направление взгляда (-1 влево, 1 вправо)
+player.facing = 1;
+
 function initShip() {
     startGX = Math.floor(TARGET_COLS / 2) - 2; 
     startGY = Math.floor(TARGET_ROWS / 2) - 4; 
@@ -489,6 +492,14 @@ function drawHangar() {
             ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#ffa000"; ctx.textAlign = "center";
             ctx.fillText("ENG", x + w/2, y + h/2 - 5); ctx.fillText("STATION", x + w/2, y + h/2 + 15);
         }
+        if (mod.type === 'commodities_terminal') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = interactables.commodities.active ? '#d500f9' : '#aa00ff'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h);
+            
+            ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#e040fb"; ctx.textAlign = "center";
+            ctx.fillText("MARKET", x + w/2, y + h/2 - 5); ctx.fillText("ACCESS", x + w/2, y + h/2 + 15);
+        }
     });
     
     ctx.fillStyle = '#455a64'; shipTiles.forEach(t => { ctx.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE); });
@@ -515,10 +526,93 @@ function drawHangar() {
 }
 
 function drawPlayer() {
-    const pRad = player.radius * TILE_SIZE;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(player.x, player.y + (pRad/2), pRad, pRad * 0.5, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(player.x, player.y, pRad, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.arc(player.x - pRad*0.3, player.y - pRad*0.3, pRad/3, 0, Math.PI*2); ctx.fill();
+    const cx = player.x;
+    const cy = player.y;
+    const scale = TILE_SIZE / 50; 
+
+    // Логика направления для псевдо-3D (отзеркаливание)
+    if (inputs.left) player.facing = -1;
+    if (inputs.right) player.facing = 1;
+
+    // Анимация подпрыгивания (bobbing)
+    const isMoving = (inputs.up || inputs.down || inputs.left || inputs.right);
+    const bob = isMoving ? Math.sin(time * 15) * 2 * scale : 0;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Тень (статичная, не прыгает)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(0, 15 * scale, 12 * scale, 6 * scale, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Применяем отзеркаливание
+    ctx.scale(player.facing, 1);
+    ctx.translate(0, bob); // Подпрыгивание всего тела
+
+    // --- ТЕЛО (Скафандр) ---
+    // Ноги (просто овалы, имитирующие ботинки)
+    ctx.fillStyle = '#263238'; // Темные ботинки
+    ctx.beginPath();
+    // Задняя нога (немного смещена при движении)
+    const legOffset = isMoving ? Math.sin(time * 15) * 5 * scale : 0;
+    ctx.ellipse(-6 * scale - legOffset, 12 * scale, 5 * scale, 4 * scale, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Передняя нога
+    ctx.beginPath();
+    ctx.ellipse(6 * scale + legOffset, 12 * scale, 5 * scale, 4 * scale, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Торс (квадратный бронежилет)
+    ctx.fillStyle = '#37474f'; 
+    ctx.fillRect(-9 * scale, -8 * scale, 18 * scale, 20 * scale);
+    
+    // Пояс / детали
+    ctx.fillStyle = '#455a64';
+    ctx.fillRect(-9 * scale, 8 * scale, 18 * scale, 4 * scale);
+    
+    // Нагрудник (цвет игрока)
+    ctx.fillStyle = player.color; // Используем цвет игрока (зеленый по умолчанию)
+    ctx.fillRect(-7 * scale, -6 * scale, 14 * scale, 10 * scale);
+
+    // --- ГОЛОВА (Шлем) ---
+    // Большой круглый шлем "Among Us" / "Astroneer" стиля
+    ctx.fillStyle = '#eceff1'; // Белый шлем
+    ctx.beginPath();
+    ctx.arc(0, -12 * scale, 11 * scale, 0, Math.PI*2);
+    ctx.fill();
+
+    // Визор (Стекло)
+    const visorColor = '#4fc3f7'; // Голубое стекло
+    ctx.fillStyle = visorColor;
+    ctx.beginPath();
+    // Рисуем скругленный прямоугольник для визора
+    ctx.roundRect(-8 * scale, -16 * scale, 18 * scale, 10 * scale, 4 * scale); 
+    ctx.fill();
+
+    // Блик на стекле
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(4 * scale, -14 * scale, 3 * scale, 1.5 * scale, -0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    // --- РУКИ ---
+    // Просто кружочки по бокам (Rayman style или просто руки в боки)
+    ctx.fillStyle = '#37474f';
+    ctx.beginPath();
+    ctx.arc(-11 * scale, 0, 4 * scale, 0, Math.PI*2); // Задняя рука
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(10 * scale, 0, 4 * scale, 0, Math.PI*2); // Передняя рука
+    ctx.fill();
+
+    // --- РЮКЗАК (Джетпак) ---
+    // Виден немного сзади
+    ctx.fillStyle = '#546e7a';
+    ctx.fillRect(-14 * scale, -8 * scale, 5 * scale, 16 * scale);
+
+    ctx.restore();
 }
 
 function drawStorageUnit(gx, gy, wTiles, hTiles) {

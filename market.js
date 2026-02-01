@@ -195,6 +195,9 @@ window.renderMarketGrid = function() {
             const div = document.createElement('div');
             div.className = 'grid-item-visual';
             
+            // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: Box Sizing ---
+            div.style.boxSizing = 'border-box';
+
             if (item.type === 'fuel') {
                 div.classList.add('fuel-style');
                 div.innerHTML = '<div class="fuel-charge"></div><span class="fuel-label">F-CELL</span>';
@@ -203,9 +206,8 @@ window.renderMarketGrid = function() {
                 div.innerHTML = `<span class="cargo-text">${item.name ? item.name.substring(0,3).toUpperCase() : 'BOX'}</span>`;
             }
 
-            // ШАГ 47px (единый стандарт) + 5px PAD
             const step = 47; 
-            const pad = 5;
+            const pad = 4; // Padding 4px
             
             div.style.width = (item.w * step - 2) + 'px';
             div.style.height = (item.h * step - 2) + 'px';
