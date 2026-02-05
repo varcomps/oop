@@ -200,6 +200,9 @@ function update() {
 
     } else if (currentState === STATE_MAP) {
         updateWarpLogic();
+        
+        if (window.updateBlackHolePhysics) window.updateBlackHolePhysics(); 
+
         if (!isWarping && !isDocked) { 
             if (inputs.left) mapShip.angle -= mapShip.rotationSpeed;
             if (inputs.right) mapShip.angle += mapShip.rotationSpeed;
@@ -209,25 +212,45 @@ function update() {
         mapShip.vx *= mapShip.friction; mapShip.vy *= mapShip.friction;
         mapShip.x += mapShip.vx; mapShip.y += mapShip.vy;
         
-        // --- ГРАНИЦЫ КАРТЫ (ВЫТАЛКИВАНИЕ) ---
         if (mapShip.x < 0) { mapShip.x = 0; mapShip.vx = -mapShip.vx * 0.5; }
         if (mapShip.x > canvas.width) { mapShip.x = canvas.width; mapShip.vx = -mapShip.vx * 0.5; }
         if (mapShip.y < 0) { mapShip.y = 0; mapShip.vy = -mapShip.vy * 0.5; }
         if (mapShip.y > canvas.height) { mapShip.y = canvas.height; mapShip.vy = -mapShip.vy * 0.5; }
 
-        // --- ИСПРАВЛЕННАЯ ЛОГИКА СТЫКОВКИ ---
         const inZone = window.isShipInDockingZone ? window.isShipInDockingZone() : false;
+
+        // --- ЛОГИКА ТЕКСТА СЕКТОРА ---
+        let infoText = "";
+        let infoClass = "sector-normal";
+
+        if (isWarping) {
+            infoText = "HYPERSPACE TRAVERSAL...";
+        } else {
+            if (currentSystemType === 'station') {
+                infoText = "TRADE OUTPOST SECTOR";
+            } else if (currentSystemType === 'system') {
+                infoText = "UNCHARTED STAR SYSTEM";
+            } else if (currentSystemType === 'black_hole') {
+                infoText = "⚠ GRAVITATIONAL SINGULARITY DETECTED ⚠";
+                infoClass = "sector-danger"; // Включаем красный цвет и пульсацию
+            } else {
+                infoText = "DEEP SPACE";
+            }
+        }
 
         if (isDocked) {
             dockBtn.style.display = 'block'; dockBtn.innerText = "UNDOCK [F]"; dockBtn.style.color = "#ff5252"; dockBtn.style.borderColor = "#ff5252";
-            uiHint.innerHTML = "в ангаре. <span class='hl'>[ F ]</span> чтобы вылететь";
+            uiHint.className = 'sector-normal';
+            uiHint.innerHTML = "STATUS: DOCKED";
         } else if (currentSystemType === 'station' && inZone && !isWarping) {
             dockBtn.style.display = 'block'; dockBtn.innerText = "DOCK [F]"; dockBtn.style.color = "#00e5ff"; dockBtn.style.borderColor = "#00e5ff";
-            uiHint.innerHTML = "доступна стыковка. <span class='hl'>[ F ]</span> для стыковки";
+            uiHint.className = 'sector-normal';
+            uiHint.innerHTML = "DOCKING AVAILABLE";
         } else {
             dockBtn.style.display = 'none';
-            if (currentSystemType === null) uiHint.innerHTML = "ПУСТОЙ СЕКТОР";
-            else uiHint.innerHTML = "ПОЛЕТ: <span class='hl'>WASD</span> Двигатели, <span class='hl'>[ E ]</span> Встать с кресла <span class='hl'>[ M ]</span> Сканер";
+            // Применяем новые стили и текст вместо подсказок управления
+            uiHint.className = infoClass;
+            uiHint.innerHTML = infoText;
         }
     }
 }
@@ -417,4 +440,319 @@ function drawHangar() {
         ctx.fillStyle = isDocked ? '#00e676' : '#d32f2f'; ctx.beginPath(); ctx.arc(x + w/2, y + h/2, 4, 0, Math.PI*2); ctx.fill();
     });
     drawPlayer();
+}
+
+function drawPlayer() {
+    const cx = player.x;
+    const cy = player.y;
+    const scale = TILE_SIZE / 50; 
+
+    // Логика направления для псевдо-3D (отзеркаливание)
+    if (inputs.left) player.facing = -1;
+    if (inputs.right) player.facing = 1;
+
+    // Анимация подпрыгивания (bobbing)
+    const isMoving = (inputs.up || inputs.down || inputs.left || inputs.right);
+    const bob = isMoving ? Math.sin(time * 15) * 2 * scale : 0;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Тень (статичная, не прыгает)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(0, 15 * scale, 12 * scale, 6 * scale, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Применяем отзеркаливание
+    ctx.scale(player.facing, 1);
+    ctx.translate(0, bob); // Подпрыгивание всего тела
+
+    // --- ТЕЛО (Скафандр) ---
+    // Ноги (просто овалы, имитирующие ботинки)
+    ctx.fillStyle = '#263238'; // Темные ботинки
+    ctx.beginPath();
+    // Задняя нога (немного смещена при движении)
+    const legOffset = isMoving ? Math.sin(time * 15) * 5 * scale : 0;
+    ctx.ellipse(-6 * scale - legOffset, 12 * scale, 5 * scale, 4 * scale, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Передняя нога
+    ctx.beginPath();
+    ctx.ellipse(6 * scale + legOffset, 12 * scale, 5 * scale, 4 * scale, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Торс (квадратный бронежилет)
+    ctx.fillStyle = '#37474f'; 
+    ctx.fillRect(-9 * scale, -8 * scale, 18 * scale, 20 * scale);
+    
+    // Пояс / детали
+    ctx.fillStyle = '#455a64';
+    ctx.fillRect(-9 * scale, 8 * scale, 18 * scale, 4 * scale);
+    
+    // Нагрудник (цвет игрока)
+    ctx.fillStyle = player.color; // Используем цвет игрока (зеленый по умолчанию)
+    ctx.fillRect(-7 * scale, -6 * scale, 14 * scale, 10 * scale);
+
+    // --- ГОЛОВА (Шлем) ---
+    // Большой круглый шлем "Among Us" / "Astroneer" стиля
+    ctx.fillStyle = '#eceff1'; // Белый шлем
+    ctx.beginPath();
+    ctx.arc(0, -12 * scale, 11 * scale, 0, Math.PI*2);
+    ctx.fill();
+
+    // Визор (Стекло)
+    const visorColor = '#4fc3f7'; // Голубое стекло
+    ctx.fillStyle = visorColor;
+    ctx.beginPath();
+    // Рисуем скругленный прямоугольник для визора
+    ctx.roundRect(-8 * scale, -16 * scale, 18 * scale, 10 * scale, 4 * scale); 
+    ctx.fill();
+
+    // Блик на стекле
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(4 * scale, -14 * scale, 3 * scale, 1.5 * scale, -0.3, 0, Math.PI*2);
+    ctx.fill();
+
+    // --- РУКИ ---
+    // Просто кружочки по бокам (Rayman style или просто руки в боки)
+    ctx.fillStyle = '#37474f';
+    ctx.beginPath();
+    ctx.arc(-11 * scale, 0, 4 * scale, 0, Math.PI*2); // Задняя рука
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(10 * scale, 0, 4 * scale, 0, Math.PI*2); // Передняя рука
+    ctx.fill();
+
+    // --- РЮКЗАК (Джетпак) ---
+    // Виден немного сзади
+    ctx.fillStyle = '#546e7a';
+    ctx.fillRect(-14 * scale, -8 * scale, 5 * scale, 16 * scale);
+
+    ctx.restore();
+}
+
+function drawStorageUnit(gx, gy, wTiles, hTiles) {
+    const x = gx * TILE_SIZE; 
+    const y = gy * TILE_SIZE; 
+    const w = wTiles * TILE_SIZE; 
+    const h = hTiles * TILE_SIZE;
+    
+    // -- ОСНОВА (Сейф) --
+    // Темный тяжелый металл
+    ctx.fillStyle = '#101214'; 
+    ctx.fillRect(x, y, w, h);
+    
+    // Бронированные пластины
+    ctx.fillStyle = '#263238';
+    const border = 4;
+    ctx.fillRect(x, y, w, border); // Верх
+    ctx.fillRect(x, y + h - border, w, border); // Низ
+    ctx.fillRect(x, y, border, h); // Лево
+    ctx.fillRect(x + w - border, y, border, h); // Право
+
+    // Лицевая панель (рифленая)
+    ctx.fillStyle = '#1c2126';
+    const innerPad = 10;
+    ctx.fillRect(x + innerPad, y + innerPad, w - innerPad*2, h - innerPad*2);
+    
+    // Замки/Ручки
+    ctx.fillStyle = '#455a64';
+    ctx.fillRect(x + w/2 - 2, y + innerPad + 5, 4, h - innerPad*2 - 10);
+    
+    // Индикатор (красный/зеленый)
+    ctx.fillStyle = interactables.storage.active ? '#00e676' : '#ff1744';
+    ctx.beginPath(); ctx.arc(x + w - 15, y + 15, 3, 0, Math.PI*2); ctx.fill();
+
+    // -- ГОЛОГРАММА (появляется при активации) --
+    if (interactables.storage.active) {
+        // Базовый альфа-канал для пульсации
+        const alpha = (Math.sin(time * 3) + 1) / 2 * 0.3 + 0.2;
+        
+        ctx.save();
+        ctx.strokeStyle = `rgba(0, 229, 255, ${alpha + 0.2})`;
+        ctx.fillStyle = `rgba(0, 229, 255, ${alpha * 0.3})`;
+        ctx.lineWidth = 1.5;
+        
+        const cx = x + w/2;
+        const cy = y + h/2;
+        const lift = Math.sin(time * 1.5) * 4; // Плавное парение вверх-вниз
+
+        // Квадрат 1: Самый большой, вращается медленно
+        ctx.save();
+        ctx.translate(cx, cy - 20 + lift);
+        ctx.rotate(time * 0.5);
+        const sz1 = TILE_SIZE * 0.7;
+        ctx.beginPath(); ctx.rect(-sz1/2, -sz1/2, sz1, sz1); ctx.stroke();
+        // Уголки
+        ctx.fillStyle = '#00e5ff';
+        ctx.fillRect(-sz1/2 - 2, -sz1/2 - 2, 4, 4);
+        ctx.fillRect(sz1/2 - 2, sz1/2 - 2, 4, 4);
+        ctx.fillRect(-sz1/2 - 2, sz1/2 - 2, 4, 4);
+        ctx.fillRect(sz1/2 - 2, -sz1/2 - 2, 4, 4);
+        ctx.restore();
+
+        // Квадрат 2: Поменьше, вращается быстрее в другую сторону
+        ctx.save();
+        ctx.translate(cx, cy - 35 + lift);
+        ctx.rotate(-time * 1.2);
+        const sz2 = TILE_SIZE * 0.45;
+        ctx.strokeStyle = `rgba(0, 229, 255, ${alpha + 0.4})`; // Ярче
+        ctx.beginPath(); ctx.rect(-sz2/2, -sz2/2, sz2, sz2); ctx.stroke(); ctx.fill();
+        ctx.restore();
+
+        // Квадрат 3: Статичный, верхний "экран"
+        ctx.save();
+        ctx.translate(cx, cy - 50 + lift);
+        const sz3 = TILE_SIZE * 0.2;
+        ctx.fillStyle = '#00e5ff';
+        ctx.beginPath(); ctx.rect(-sz3/2, -sz3/2, sz3, sz3); ctx.fill();
+        ctx.restore();
+
+        // Лучи проектора снизу
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(0, 229, 255, 0.1)`;
+        ctx.moveTo(x + 20, y + 20); ctx.lineTo(cx, cy - 20 + lift);
+        ctx.moveTo(x + w - 20, y + 20); ctx.lineTo(cx, cy - 20 + lift);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+}
+
+function drawEngine(gx, gy, wTiles, hTiles) {
+    const x = gx * TILE_SIZE; 
+    const y = gy * TILE_SIZE; 
+    const w = wTiles * TILE_SIZE; 
+    const h = hTiles * TILE_SIZE;
+
+    // -- КОРПУС --
+    // Массивный, тяжелый блок
+    ctx.fillStyle = '#191919'; // Почти черный
+    ctx.fillRect(x, y, w, h);
+    
+    // Боковые усилители (ребристые)
+    ctx.fillStyle = '#2d2d2d';
+    const sideW = w * 0.15;
+    ctx.fillRect(x, y, sideW, h);
+    ctx.fillRect(x + w - sideW, y, sideW, h);
+    
+    // Решетки охлаждения на боках
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    for(let i = y + 5; i < y + h; i += 6) {
+        ctx.beginPath(); ctx.moveTo(x + 2, i); ctx.lineTo(x + sideW - 2, i); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + w - sideW + 2, i); ctx.lineTo(x + w - 2, i); ctx.stroke();
+    }
+
+    // Центральная часть (Механика)
+    const cx = x + w / 2;
+    // Трубки
+    ctx.strokeStyle = '#546e7a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, y + 10); ctx.lineTo(cx - 10, y + h - 20);
+    ctx.moveTo(cx + 10, y + 10); ctx.lineTo(cx + 10, y + h - 20);
+    ctx.stroke();
+
+    // -- СОПЛО --
+    // Сложная форма (Кольца)
+    const nozzleY = y + h - TILE_SIZE * 0.4;
+    const nozzleMaxW = w * 0.6;
+    
+    // Внешнее кольцо
+    ctx.fillStyle = '#263238';
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleY, nozzleMaxW/2, TILE_SIZE * 0.15, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Внутреннее кольцо (ближе к огню)
+    ctx.fillStyle = '#10151a';
+    ctx.beginPath();
+    ctx.ellipse(cx, nozzleY + 5, nozzleMaxW/2.5, TILE_SIZE * 0.12, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // -- ЯДРО И ВЫХЛОП --
+    const pulse = (Math.sin(time * 15) + 1) / 2; // Очень быстрое мерцание
+
+    // Само ядро (внутри корпуса)
+    const coreGrad = ctx.createRadialGradient(cx, y + h/2, 5, cx, y + h/2, 25);
+    coreGrad.addColorStop(0, '#fff');
+    coreGrad.addColorStop(0.4, 'rgba(0, 229, 255, 1)');
+    coreGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = coreGrad;
+    // Рисуем свечение через "щели" в центре
+    ctx.fillRect(cx - 5, y + 20, 10, h - 50);
+
+    // Плазменный хвост
+    const tailW = nozzleMaxW * 0.4;
+    const tailLen = TILE_SIZE * (0.8 + pulse * 0.2);
+    
+    const flameGrad = ctx.createLinearGradient(cx, nozzleY, cx, nozzleY + tailLen);
+    flameGrad.addColorStop(0, '#fff');
+    flameGrad.addColorStop(0.3, '#00e5ff');
+    flameGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+
+    ctx.fillStyle = flameGrad;
+    ctx.beginPath();
+    ctx.moveTo(cx - tailW/2, nozzleY + 5);
+    ctx.lineTo(cx + tailW/2, nozzleY + 5);
+    ctx.lineTo(cx, nozzleY + 5 + tailLen);
+    ctx.fill();
+
+    // Искры / Частицы
+    ctx.fillStyle = '#fff';
+    if (Math.random() > 0.5) ctx.fillRect(cx - 5 + Math.random()*10, nozzleY + 10 + Math.random()*20, 2, 2);
+
+    // Контур всего модуля
+    ctx.strokeStyle = '#37474f';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+}
+
+function drawCaptainBridge(gx, gy, wTiles, hTiles) {
+    const x = gx * TILE_SIZE; 
+    const y = gy * TILE_SIZE; 
+    const w = wTiles * TILE_SIZE; 
+    const h = hTiles * TILE_SIZE; 
+    const cx = x + w / 2; 
+    const cy = y + h / 2;
+    ctx.fillStyle = '#1a2327'; ctx.fillRect(x, y, w, h); 
+    ctx.fillStyle = '#263238'; const consoleThick = TILE_SIZE * 0.2;
+    ctx.fillRect(x, y, w, consoleThick); ctx.fillRect(x, y + h - consoleThick, w, consoleThick); 
+    ctx.fillRect(x, y, consoleThick, h); ctx.fillRect(x + w - consoleThick, y, consoleThick, h);
+    ctx.fillStyle = interactables.bridge.active ? '#00e5ff' : '#00838f'; 
+    const bit = TILE_SIZE * 0.24; 
+    if (wTiles >= 2) { 
+        for (let i = x + bit; i < x + w - bit; i += bit * 1.5) { 
+            ctx.fillRect(i, y + TILE_SIZE * 0.04, bit * 0.5, bit * 0.25); 
+            ctx.fillRect(i, y + h - TILE_SIZE * 0.16, bit * 0.5, bit * 0.25); 
+        }   
+    }
+    ctx.save(); 
+    ctx.translate(cx, cy);
+    if (interactables.bridge.active) {
+        ctx.shadowBlur = 20; ctx.shadowColor = '#00e5ff'; ctx.strokeStyle = '#00e5ff'; ctx.globalAlpha = 0.9;
+        ctx.rotate(time * 0.2); 
+        ctx.beginPath(); ctx.arc(0, 0, TILE_SIZE * 0.8, 0, Math.PI * 2); ctx.lineWidth = 3; ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, TILE_SIZE * 0.5, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#00e5ff'; 
+        ctx.beginPath(); 
+        ctx.moveTo(0, -TILE_SIZE * 0.3); 
+        ctx.lineTo(TILE_SIZE * 0.2, TILE_SIZE * 0.2); 
+        ctx.lineTo(0, TILE_SIZE * 0.1); 
+        ctx.lineTo(-TILE_SIZE * 0.2, TILE_SIZE * 0.2);  
+        ctx.fill();
+    } else { 
+        ctx.fillStyle = '#37474f'; ctx.beginPath(); ctx.arc(0, 0, TILE_SIZE * 0.3, 0, Math.PI * 2); ctx.fill(); 
+        ctx.strokeStyle = '#455a64'; ctx.lineWidth = 2; ctx.stroke(); 
+    }
+    ctx.restore();
+}
+function drawAirlock(gx, gy, wTiles, hTiles) {
+    const x = gx * TILE_SIZE; const y = gy * TILE_SIZE; const w = wTiles * TILE_SIZE; const h = hTiles * TILE_SIZE;
+    ctx.fillStyle = '#546e7a'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#263238'; ctx.fillRect(x+5, y+5, w-10, h-10);
+    ctx.fillStyle = isDocked ? '#00e676' : '#d32f2f'; ctx.beginPath(); ctx.arc(x+w/2, y+h/2, 4, 0, Math.PI*2); ctx.fill();
+    if (interactables.airlock.active) { ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h); }
 }

@@ -4,103 +4,65 @@
     <meta charset="UTF-8">
     <title>Deep Space: Modular</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400&family=Share+Tech+Mono&display=swap');
 
-        /* СКРЫТИЕ СКРОЛЛБАРОВ */
         ::-webkit-scrollbar { display: none; }
-        body { scrollbar-width: none; -ms-overflow-style: none; margin: 0; padding: 0; background-color: #050505; overflow: hidden; font-family: 'Roboto', sans-serif; user-select: none; }
-        
+        body { scrollbar-width: none; margin: 0; padding: 0; background-color: #050505; overflow: hidden; font-family: 'Roboto', sans-serif; user-select: none; }
         canvas { display: block; background-color: #050505; cursor: crosshair; }
 
-        /* UI: ВАЛЮТА И ТОПЛИВО */
+        /* UI: HUD */
         #hud-top-left { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 150; pointer-events: none; transition: left 0.3s; }
-        
         .hud-display { font-family: 'Orbitron', sans-serif; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px rgba(0,0,0,0.5); display: flex; align-items: center; }
         .currency-text { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
         .fuel-text { color: #00e676; text-shadow: 0 0 10px rgba(0, 230, 118, 0.5); font-size: 20px; }
         .sc-symbol { font-size: 16px; color: #888; margin-left: 5px; }
         .fuel-label { font-size: 14px; color: #555; margin-right: 10px; letter-spacing: 2px; }
 
-        /* UI: ГЛАВНОЕ МЕНЮ */
+        /* UI: MENU */
         #mainMenu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); display: flex; justify-content: center; align-items: center; z-index: 200; transition: opacity 0.8s ease-out; }
         #mainMenu.hidden { opacity: 0; pointer-events: none; }
         .start-btn { width: 120px; height: 120px; border: 2px solid #00e5ff; border-radius: 50%; background: transparent; color: #00e5ff; font-size: 50px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 25px rgba(0, 229, 255, 0.3); }
         .start-btn:hover { background: rgba(0, 229, 255, 0.1); box-shadow: 0 0 60px rgba(0, 229, 255, 0.8); transform: scale(1.1); }
         .start-btn::after { content: '▶'; margin-left: 8px; }
 
-        /* ОБЩИЕ СТИЛИ ДЛЯ ОКОН */
+        /* ОКНА */
         .ui-window { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #0b0b0d; border: 1px solid #444; box-shadow: 0 10px 50px rgba(0,0,0,0.9); z-index: 150; flex-direction: column; color: #ccc; transition: width 0.3s; }
-        .ui-header { padding: 12px 15px; background: #141416; border-bottom: 1px solid #333; font-family: 'Orbitron', sans-serif; font-size: 14px; letter-spacing: 2px; display: flex; justify-content: space-between; color: #ccc; }
+        .ui-header { padding: 12px 15px; background: #141416; border-bottom: 1px solid #333; font-family: 'Orbitron', sans-serif; font-size: 14px; display: flex; justify-content: space-between; color: #ccc; }
         .ui-header span:first-child { color: #00e5ff; text-shadow: 0 0 8px rgba(0, 229, 255, 0.2); }
         .close-btn { cursor: pointer; color: #555; font-weight: bold; transition: 0.2s; font-size: 12px; }
         .close-btn:hover { color: #ff5252; }
 
-        /* --- СЕТКА (ЕДИНЫЙ СТАНДАРТ) --- */
-        .grid-standard { 
-            display: grid; 
-            grid-template-columns: repeat(10, 45px); 
-            grid-template-rows: repeat(10, 45px); 
-            gap: 2px; 
-            background: #0f0f0f; 
-            border: 1px solid #333; 
-            padding: 4px; 
-            position: relative; 
-            width: 468px; 
-            height: 468px;
-            box-sizing: content-box; 
-            flex-shrink: 0;
-            margin: 0 auto; 
-        }
-        
+        /* СЕТКА ИНВЕНТАРЯ */
+        .grid-standard { display: grid; grid-template-columns: repeat(10, 45px); grid-template-rows: repeat(10, 45px); gap: 2px; background: #0f0f0f; border: 1px solid #333; padding: 4px; position: relative; width: 468px; height: 468px; box-sizing: content-box; flex-shrink: 0; margin: 0 auto; }
         .grid-cell { width: 100%; height: 100%; background: #181818; border: 1px solid #222; position: relative; box-sizing: border-box; }
         .grid-cell:hover { border-color: #444; }
-
-        /* --- ЭЛЕМЕНТЫ В СЕТКЕ (VISUALS) --- */
         .grid-item-visual { position: absolute; z-index: 10; pointer-events: none; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        
-        /* Стили Топлива */
         .fuel-style { background: #263238; border: 1px solid #37474f; box-shadow: inset 0 0 5px rgba(0,0,0,0.8); }
         .fuel-charge { width: 60%; height: 4px; background: #00bcd4; box-shadow: 0 0 8px #00bcd4; }
         .fuel-label { position: absolute; bottom: 2px; right: 4px; font-size: 8px; color: #546e7a; font-family: monospace; }
-        
-        /* Стили Груза */
         .cargo-style { background: #3e2723; border: 1px solid #5d4037; }
         .cargo-text { font-family: 'Orbitron'; font-size: 10px; color: #d7ccc8; text-transform: uppercase; letter-spacing: 1px; }
+        .ghost-item { display: none; position: absolute; border: 1px solid #00e5ff; background: rgba(0, 229, 255, 0.1); pointer-events: none; z-index: 200; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); }
 
-        /* Призрак */
-        .ghost-item { 
-            display: none; position: absolute; border: 1px solid #00e5ff; background: rgba(0, 229, 255, 0.1); 
-            pointer-events: none; z-index: 200; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); 
-        }
-
-        /* --- СКЛАД И РЕАКТОР --- */
+        /* STORAGE UI */
         #storageUI { min-width: 550px; height: auto; }
         .storage-body { display: flex; flex: 1; padding: 20px; gap: 20px; justify-content: center; align-items: flex-start; }
-        
         .side-panel { display: none; width: 200px; background: #111; border: 1px solid #333; flex-direction: column; padding: 10px; flex-shrink: 0; }
         .panel-label { font-size: 11px; color: #666; margin-bottom: 15px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; letter-spacing: 1px; }
         .items-list { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; overflow-y: auto; }
-        
-        .grid-container-wrapper { 
-            display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; 
-            flex-shrink: 0; 
-        }
-
+        .grid-container-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; flex-shrink: 0; }
         .shop-item-btn { width: 100%; height: 40px; background: #1a1a1a; border: 1px solid #333; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; cursor: pointer; color: #999; transition: 0.2s; font-family: 'Roboto', sans-serif; font-size: 11px; user-select: none; }
         .shop-item-btn:hover { background: #222; border-color: #555; color: #fff; }
         .price-tag { color: #ffd700; font-family: 'Orbitron', sans-serif; font-size: 10px; }
 
-        /* --- РЫНОК --- */
+        /* MARKET UI */
         #marketUI { width: 1100px; height: 600px; flex-direction: row; }
-        
         .market-list-panel { width: 250px; border-right: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
         .market-trade-panel { width: 300px; display: flex; flex-direction: column; padding: 20px; border-right: 1px solid #333; flex-shrink: 0; }
         .market-inv-panel { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px; background: #0b0b0d; }
-
         .market-item-row { display: flex; padding: 8px; border-bottom: 1px solid #222; cursor: pointer; align-items: center; font-family: 'Roboto'; font-size: 12px; color: #888; }
         .market-item-row:hover { background: #1a1a1a; color: #ccc; }
         .market-item-row.selected { background: #263238; color: #fff; border-left: 3px solid #00e5ff; }
-        
         .mi-name { flex: 1; font-weight: bold; }
         .mi-price { width: 80px; text-align: right; color: #ffd700; font-family: monospace; }
         .mi-trend { width: 20px; text-align: center; }
@@ -109,11 +71,6 @@
         .trend-down { color: #ff1744; }
         .status-sell { color: #000; background: #00e5ff; padding: 2px 4px; border-radius: 2px; }
         .status-buy { color: #fff; background: #d500f9; padding: 2px 4px; border-radius: 2px; }
-
-        .tp-header { font-family: 'Orbitron'; font-size: 18px; color: #fff; margin-bottom: 5px; }
-        .tp-info { font-family: 'Roboto'; font-size: 13px; color: #aaa; margin-bottom: 3px; }
-        .tp-actions { margin-top: 15px; display: flex; gap: 10px; }
-        
         .trade-btn { flex: 1; padding: 12px; border: none; font-family: 'Orbitron'; cursor: pointer; font-size: 12px; transition: 0.2s; }
         .btn-buy { background: #004d40; color: #00e676; border: 1px solid #00695c; }
         .btn-buy:hover { background: #00695c; }
@@ -121,86 +78,85 @@
         .btn-sell:hover { background: #6a1b9a; }
         .trade-btn.disabled { background: #222; color: #555; cursor: not-allowed; border: 1px solid #333; }
 
-        /* UI: КАРТА */
+        /* MAP UI */
         #mapUI { display: none; position: absolute; bottom: 30px; right: 30px; flex-direction: column; align-items: flex-end; gap: 15px; pointer-events: none; }
         #mapUI button { pointer-events: auto; }
-        
-        .jump-btn { 
-            padding: 15px 30px; 
-            font-family: 'Orbitron', sans-serif; font-size: 18px; font-weight: bold; 
-            color: #ff5252; background: rgba(30, 0, 0, 0.9); border: 2px solid #ff5252; 
-            cursor: pointer; transition: 0.2s; letter-spacing: 2px; text-transform: uppercase; 
-            box-shadow: 0 0 15px rgba(255, 82, 82, 0.2); 
-            display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            height: 80px; width: 250px; 
-        }
+        .jump-btn { padding: 15px 30px; font-family: 'Orbitron', sans-serif; font-size: 18px; font-weight: bold; color: #ff5252; background: rgba(30, 0, 0, 0.9); border: 2px solid #ff5252; cursor: pointer; transition: 0.2s; letter-spacing: 2px; text-transform: uppercase; box-shadow: 0 0 15px rgba(255, 82, 82, 0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80px; width: 250px; }
         .jump-btn:hover:not(:disabled) { background: rgba(60, 0, 0, 0.9); box-shadow: 0 0 25px rgba(255, 82, 82, 0.5); }
         .jump-btn:disabled { border-color: #444 !important; color: #555; background: #111; cursor: not-allowed; box-shadow: none; }
         .btn-sub { font-size: 10px; opacity: 0.7; font-weight: normal; margin-top: 5px; }
-
-        #dockBtn { 
-            display: none; padding: 15px 50px; 
-            font-family: 'Orbitron', sans-serif; font-size: 20px; font-weight: bold; 
-            color: #00e5ff; background: rgba(0, 30, 30, 0.9); border: 2px solid #00e5ff; 
-            cursor: pointer; transition: 0.2s; letter-spacing: 3px; text-transform: uppercase; 
-            box-shadow: 0 0 15px rgba(0, 229, 255, 0.2); 
-            animation: pulse 2s infinite; 
-        }
+        #dockBtn { display: none; padding: 15px 50px; font-family: 'Orbitron', sans-serif; font-size: 20px; font-weight: bold; color: #00e5ff; background: rgba(0, 30, 30, 0.9); border: 2px solid #00e5ff; cursor: pointer; transition: 0.2s; letter-spacing: 3px; text-transform: uppercase; box-shadow: 0 0 15px rgba(0, 229, 255, 0.2); animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; box-shadow: 0 0 25px rgba(0, 229, 255, 0.5); } 100% { opacity: 0.8; } }
-        
         #chargeBarContainer { width: 350px; height: 6px; background: #111; display: none; border: 1px solid #333; }
         #chargeBar { width: 0%; height: 100%; background: #00e5ff; box-shadow: 0 0 15px #00e5ff; transition: width 0.1s linear; }
 
-        /* UI: СПЕКТРАЛЬНАЯ ЛОКАЛИЗАЦИЯ */
-        #spectrumUI { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 5, 8, 0.95); z-index: 180; flex-direction: column; align-items: center; justify-content: center; }
-        .sp-frame { position: relative; width: 800px; height: 600px; border: 1px solid #444; background: #000; box-shadow: 0 0 50px rgba(0,0,0,1); display: flex; flex-direction: column; }
-        .sp-header { padding: 15px; background: #111; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
-        .sp-title { font-family: 'Orbitron', sans-serif; color: #7c4dff; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(124, 77, 255, 0.5); }
-        .sp-canvas-container { position: relative; width: 100%; height: 480px; background: #050505; overflow: hidden; border-bottom: 1px solid #333; cursor: crosshair; }
-        #spectrumCanvas { width: 100%; height: 100%; }
+        /* === 3D STAR MAP UI === */
+        #spectrumUI { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 180; align-items: center; justify-content: center; }
         
-        .sp-footer { display: flex; height: 60px; background: #0b0b0d; align-items: center; padding: 0 20px; justify-content: space-between; }
-        .sp-status { font-family: 'Orbitron', monospace; color: #00e676; font-size: 14px; letter-spacing: 1px; }
-        .sp-scan-btn { 
-            background: #7c4dff; color: #fff; border: none; padding: 10px 30px; 
-            font-family: 'Orbitron', sans-serif; font-size: 14px; cursor: pointer; 
-            box-shadow: 0 0 10px rgba(124, 77, 255, 0.3); transition: 0.2s; 
+        .sp-3d-wrapper {
+            position: relative;
+            width: 800px; height: 600px;
+            border: 2px solid #333;
+            background: #000;
+            box-shadow: 0 0 50px rgba(0, 229, 255, 0.1);
         }
-        .sp-scan-btn:hover { background: #9575cd; box-shadow: 0 0 20px rgba(124, 77, 255, 0.6); }
-        .sp-scan-btn:disabled { background: #333; color: #555; cursor: not-allowed; box-shadow: none; }
-        
-        .sp-overlay-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.1); font-size: 80px; font-family: 'Orbitron'; pointer-events: none; }
 
-        /* UI: БИЛД МЕНЮ */
+        canvas#sp3dCanvas { width: 100%; height: 100%; display: block; cursor: move; }
+
+        .sp-overlay-ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box;
+        }
+
+        .sp-header-3d {
+            display: flex; justify-content: space-between; 
+            font-family: 'Orbitron'; color: #00e5ff; font-size: 14px; text-shadow: 0 0 5px #00e5ff;
+            background: rgba(0,0,0,0.5); padding: 5px;
+        }
+
+        .sp-bottom-controls {
+            display: flex; justify-content: flex-end; align-items: flex-end;
+            pointer-events: auto; 
+        }
+
+        .sp-btn {
+            background: rgba(0,0,0,0.8); border: 1px solid #00e5ff; color: #00e5ff;
+            padding: 10px 30px; font-family: 'Orbitron'; font-size: 14px; cursor: pointer;
+            transition: 0.2s; margin-left: 10px;
+        }
+        .sp-btn:hover { background: #00e5ff; color: #000; }
+        
+        .sp-engage-btn {
+            display: none;
+            background: #d500f9; border-color: #ea80fc; color: #fff;
+            box-shadow: 0 0 15px #d500f9; font-weight: bold; font-size: 16px;
+            padding: 15px 40px;
+        }
+        .sp-engage-btn:hover { background: #aa00ff; transform: scale(1.05); }
+
+        /* BUILD MENU */
         #buildMenu { 
             display: flex; position: absolute; top: 0; bottom: 0; left: -200px; width: 200px;
             background: #0f0f11; border-right: 1px solid #333; box-shadow: 5px 0 30px rgba(0,0,0,0.8);
             z-index: 200; flex-direction: column; overflow: visible; 
             transition: left 0.3s cubic-bezier(0.1, 0.7, 0.1, 1); 
         }
-        
         #buildMenu.slide-in { left: 0; }
         #buildMenu.hidden-state { display: none !important; }
-
         .build-handle-strip {
             position: absolute; top: 0; bottom: 0; right: -30px; width: 20px;
             display: none; flex-direction: column; justify-content: space-evenly; align-items: center;
             pointer-events: none; padding: 20px 0;
         }
-
         .handle-tri { width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid #00e5ff; }
-
         .build-header { padding: 15px; border-bottom: 1px solid #333; background: #141416; }
         .build-title { font-family: 'Orbitron'; font-size: 16px; color: #00e5ff; letter-spacing: 1px; }
-
         .tabs { display: flex; background: #111; border-bottom: 1px solid #333; }
         .tab-btn { flex: 1; padding: 10px 5px; background: transparent; border: none; color: #666; font-family: 'Orbitron', sans-serif; font-size: 10px; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: #00e5ff; border-bottom: 2px solid #00e5ff; background: #1a1a1a; }
-        
         .items-container { padding: 5px; display: flex; flex-direction: column; gap: 5px; overflow-y: hidden; flex: 1; }
         .category-group { display: none; flex-direction: column; gap: 5px; width: 100%; }
         .category-group.visible { display: flex; }
-        
         .module-item { 
             display: flex; flex-direction: row; align-items: center; justify-content: flex-start;
             width: 100%; height: 40px; padding: 0 8px;
@@ -209,14 +165,14 @@
         }
         .module-item:hover { background: #252528; border-color: #555; }
         .module-item.active { background: #004d40; color: #fff; border-color: #00bcd4; }
-        
         .mod-icon { width: 22px; height: 22px; background: #333; border: 1px solid #444; margin-right: 8px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #666; }
         .mod-info { display: flex; flex-direction: column; flex: 1; }
         .mod-name { font-size: 11px; font-weight: bold; text-transform: uppercase; }
-
-        #ui-hint { position: absolute; bottom: 25px; width: 100%; text-align: center; color: #888; font-size: 1.3rem; pointer-events: none; text-shadow: 0 2px 5px black; font-family: 'Orbitron', sans-serif; transition: bottom 0.3s; }
+        #ui-hint { position: absolute; bottom: 30px; width: 100%; text-align: center; font-family: 'Orbitron', sans-serif; pointer-events: none; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; z-index: 100; }
+        .sector-normal { font-size: 16px; color: rgba(255, 255, 255, 0.4); text-shadow: 0 0 5px rgba(0, 0, 0, 0.5); }
+        .sector-danger { font-size: 20px; font-weight: bold; color: rgba(255, 23, 68, 0.9); text-shadow: 0 0 15px rgba(255, 0, 0, 0.8); animation: dangerPulse 1s infinite alternate; }
+        @keyframes dangerPulse { from { opacity: 0.7; transform: scale(1); } to { opacity: 1; transform: scale(1.05); } }
         .hl { color: #fff; font-weight: bold; }
-        
         .count-badge { font-family: 'Orbitron'; font-size: 11px; color: #ffd700; margin-left: auto; }
     </style>
 </head>
@@ -229,9 +185,8 @@
         <div class="handle-tri"></div><div class="handle-tri"></div><div class="handle-tri"></div>
         <div class="handle-tri"></div><div class="handle-tri"></div><div class="handle-tri"></div>
     </div>
-
     <div class="build-header">
-        <div class="build-title">ENGINEERING</div>
+        <div class="build-title">ИНЖЕНЕРИЯ</div>
     </div>
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('structure')">СТРУКТУРА</button>
@@ -241,9 +196,7 @@
         <div id="cat-structure" class="category-group visible">
             <div class="module-item" onclick="selectModule('basic')">
                 <div class="mod-icon">STR</div>
-                <div class="mod-info">
-                    <span class="mod-name">Каркас</span>
-                </div>
+                <div class="mod-info"><span class="mod-name">Каркас</span></div>
                 <span class="count-badge" id="hullCountDisplay">x20</span>
             </div>
         </div>
@@ -254,12 +207,8 @@
 </div>
 
 <div id="hud-top-left">
-    <div class="hud-display currency-text" id="currencyDisplay">
-        0.0010 <span class="sc-symbol">SC</span>
-    </div>
-    <div class="hud-display fuel-text" id="fuelDisplay">
-        <span class="fuel-label">FUEL</span> <span id="fuelVal">0</span>
-    </div>
+    <div class="hud-display currency-text" id="currencyDisplay">0.0010 <span class="sc-symbol">SC</span></div>
+    <div class="hud-display fuel-text" id="fuelDisplay"><span class="fuel-label">ТОПЛИВО</span> <span id="fuelVal">0</span></div>
 </div>
 
 <div id="mainMenu">
@@ -267,18 +216,21 @@
 </div>
 
 <div id="spectrumUI">
-    <div class="sp-frame">
-        <div class="sp-header">
-            <span class="sp-title">SPECTRUM LOCALIZATION</span>
-            <span class="close-btn" onclick="toggleSpectrum(false)">ЗАКРЫТЬ [ESC]</span>
-        </div>
-        <div class="sp-canvas-container">
-            <canvas id="spectrumCanvas"></canvas>
-            <div class="sp-overlay-text">SCANNER</div>
-        </div>
-        <div class="sp-footer">
-            <div class="sp-status" id="spStatus">STATUS: STANDBY</div>
-            <button id="btnScan" class="sp-scan-btn" onclick="startScanner()">INITIATE SCAN</button>
+    <div class="sp-3d-wrapper">
+        <canvas id="sp3dCanvas"></canvas>
+        
+        <div class="sp-overlay-ui">
+            <div class="sp-header-3d">
+                <span>КАРТА СЕКТОРА: ЛОКАЛЬНЫЙ КЛАСТЕР</span>
+                <span style="color:#666; cursor:pointer;" onclick="toggleSpectrum(false)">ЗАКРЫТЬ [ESC]</span>
+            </div>
+            
+            <div class="sp-bottom-controls">
+                <div>
+                    <button class="sp-btn" id="btnScanAction" onclick="perform3DScan()">СКАНИРОВАТЬ</button>
+                    <button class="sp-btn sp-engage-btn" id="btnEngage3D" onclick="engage3DRoute()">НАЧАТЬ ПРЫЖОК</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -303,25 +255,21 @@
 
 <div id="marketUI" class="ui-window">
     <div class="market-list-panel">
-        <div style="padding:10px; background:#141416; color:#00e5ff; font-family:'Orbitron'; font-size:14px; border-bottom:1px solid #333;">COMMODITIES</div>
+        <div style="padding:10px; background:#141416; color:#00e5ff; font-family:'Orbitron'; font-size:14px; border-bottom:1px solid #333;">ТОВАРЫ</div>
         <div id="marketList" style="flex:1; overflow-y:auto; background:#111;"></div>
     </div>
-    
     <div class="market-trade-panel">
         <div style="margin-bottom:10px; border:1px solid #333; background:#000;">
             <canvas id="marketGraphCanvas" width="260" height="150"></canvas>
         </div>
-        
         <div id="tradePanel" style="flex:1;"></div>
-        
         <div id="tradeStatusMsg" style="height:30px; margin-top:10px; font-family:'Orbitron'; font-size:12px; text-align:center; color:#ccc;"></div>
     </div>
-
     <div class="market-inv-panel">
         <div style="width:100%; display:flex; justify-content:flex-end; margin-bottom:10px;">
-            <span class="close-btn" onclick="toggleMarket(false)" style="cursor:pointer; color:#555;">CLOSE [ESC]</span>
+            <span class="close-btn" onclick="toggleMarket(false)" style="cursor:pointer; color:#555;">ЗАКРЫТЬ [ESC]</span>
         </div>
-        <div style="font-family:'Orbitron'; font-size:12px; color:#aaa; margin-bottom:5px;">SHIP STORAGE</div>
+        <div style="font-family:'Orbitron'; font-size:12px; color:#aaa; margin-bottom:5px;">ТРЮМ КОРАБЛЯ</div>
         <div class="grid-standard" id="marketGridContainer">
             <div id="marketGhost" class="ghost-item"></div>
         </div>
@@ -329,10 +277,10 @@
 </div>
 
 <div id="mapUI">
-    <button id="dockBtn" onclick="handleDockingInteraction()">DOCK [F]</button>
+    <button id="dockBtn" onclick="handleDockingInteraction()">СТЫКОВКА [F]</button>
     <button id="jumpBtn" class="jump-btn" onclick="initiateHyperJump()">
-        HYPER JUMP
-        <span class="btn-sub">STATUS: READY</span>
+        ГИПЕРПРЫЖОК
+        <span class="btn-sub">СТАТУС: ГОТОВ</span>
     </button>
     <div id="chargeBarContainer"><div id="chargeBar"></div></div>
 </div>
@@ -347,6 +295,5 @@
 <script src="spectrum.js"></script>
 <script src="market.js"></script> 
 <script src="main.js"></script>
-
 </body>
 </html>

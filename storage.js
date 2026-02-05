@@ -7,7 +7,14 @@ const storageTitle = document.getElementById('storageTitle');
 const fuelValUI = document.getElementById('fuelVal');
 
 // Глобальные переменные для доступа из market.js
-window.placedStorageItems = [];
+// ИЗМЕНЕНИЕ: Добавлено 5 единиц топлива со старта
+window.placedStorageItems = [
+    { type: 'fuel', x: 0, y: 0, w: 2, h: 1 },
+    { type: 'fuel', x: 2, y: 0, w: 2, h: 1 },
+    { type: 'fuel', x: 4, y: 0, w: 2, h: 1 },
+    { type: 'fuel', x: 6, y: 0, w: 2, h: 1 },
+    { type: 'fuel', x: 8, y: 0, w: 2, h: 1 }
+];
 window.holdingItemData = null; 
 
 let isTradeMode = false;
