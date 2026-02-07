@@ -5,10 +5,10 @@ const btnScanAction = document.getElementById('btnScanAction');
 const btnEngage3D = document.getElementById('btnEngage3D');
 
 // --- НАСТРОЙКИ 3D ---
-const CUBE_SIZE = 220; // Уменьшил, чтобы влезало
+const CLOUD_RADIUS = 280; // Радиус облака звезд
 const STAR_COUNT = 250;
 const FOCAL_LENGTH = 400;
-const MAX_JUMP_DIST = 160; // Макс длина одного прыжка
+const MAX_JUMP_DIST = 160; 
 
 let stars3D = [];
 let rotation = { x: 0, y: 0 };
@@ -34,7 +34,7 @@ class StarNode {
         this.px = 0; this.py = 0; this.scale = 0; // Проекции
         
         // Игрок всегда в центре
-        this.isPlayer = (Math.abs(x) < 10 && Math.abs(y) < 10 && Math.abs(z) < 10);
+        this.isPlayer = (Math.abs(x) < 5 && Math.abs(y) < 5 && Math.abs(z) < 5);
         this.type = this.isPlayer ? 'player' : 'unknown';
         this.revealedType = this.isPlayer ? 'player' : this.generateType();
         
@@ -52,10 +52,23 @@ class StarNode {
 
     generateType() {
         const r = Math.random();
-        if (r < 0.02) return 'station'; // 2%
-        if (r < 0.06) return 'system';  // 4%
-        if (r < 0.07) return 'black_hole'; // 1%
-        return 'empty'; // 93% Пустота
+        
+        // НОВЫЙ ХАРДКОРНЫЙ БАЛАНС (250 звезд)
+        
+        // 1. Станции: ~1.2% (r от 0 до 0.012)
+        // Это примерно 3 штуки на всю карту.
+        if (r < 0.012) return 'station'; 
+        
+        // 2. Системы: ~0.4% (r от 0.012 до 0.016)
+        // Это "системы ещё реже чем станция". Примерно 1 штукa на карту (или 0).
+        if (r < 0.016) return 'system';  
+        
+        // 3. Черная дыра: ~0.1% (шанс 1 к 1000)
+        // Скорее всего, на карте её не будет вовсе.
+        if (r < 0.017) return 'black_hole'; 
+        
+        // 98.3% - Пустота
+        return 'empty'; 
     }
 
     reveal() {
@@ -70,7 +83,21 @@ class StarNode {
     }
 }
 
+// Функция полного сброса (вызывается из space.js после прыжка)
+window.resetSpectrum = function() {
+    stars3D = [];
+    scan3DState = { 
+        active: false, radius: 0, maxRadius: 600, scanned: false, 
+        selectedNode: null, playerNode: null, route: [], animTime: 0
+    };
+    btnScanAction.style.display = 'inline-block';
+    btnEngage3D.style.display = 'none';
+};
+
 function initSpectrum() {
+    // ЕСЛИ ДАННЫЕ УЖЕ ЕСТЬ - НЕ ПЕРЕСОЗДАЕМ (Сохранение состояния)
+    if (stars3D.length > 0) return;
+
     sp3dCanvas.width = 800;
     sp3dCanvas.height = 600;
     
@@ -80,10 +107,18 @@ function initSpectrum() {
     stars3D.push(player);
     
     for(let i=0; i<STAR_COUNT; i++) {
-        const x = (Math.random() - 0.5) * CUBE_SIZE * 2;
-        const y = (Math.random() - 0.5) * CUBE_SIZE * 2;
-        const z = (Math.random() - 0.5) * CUBE_SIZE * 2;
-        if (Math.abs(x) > 20 || Math.abs(y) > 20 || Math.abs(z) > 20) {
+        // СФЕРИЧЕСКОЕ РАСПРЕДЕЛЕНИЕ (FREE FORM)
+        // Используем cbrt для равномерного распределения внутри сферы
+        const r = Math.cbrt(Math.random()) * CLOUD_RADIUS;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+
+        const x = r * Math.sin(phi) * Math.cos(theta);
+        const y = r * Math.sin(phi) * Math.sin(theta);
+        const z = r * Math.cos(phi);
+
+        // Исключаем зону спавна игрока, чтобы не накладывались
+        if (Math.abs(x) > 15 || Math.abs(y) > 15 || Math.abs(z) > 15) {
             stars3D.push(new StarNode(x, y, z));
         }
     }
@@ -99,11 +134,7 @@ function initSpectrum() {
         });
     });
 
-    scan3DState = { 
-        active: false, radius: 0, maxRadius: 600, scanned: false, 
-        selectedNode: null, playerNode: player, route: [], animTime: 0
-    };
-    
+    // Сброс UI при генерации
     btnScanAction.style.display = 'inline-block';
     btnEngage3D.style.display = 'none';
 
@@ -132,9 +163,13 @@ function getDist3D(a, b) {
 function toggleSpectrum(state) {
     isSpectrumOpen = state;
     document.getElementById('spectrumUI').style.display = state ? 'flex' : 'none';
-    if(state) initSpectrum();
+    if(state) {
+        // Инициализируем только если пусто
+        initSpectrum();
+    }
 }
 
+// === ОТРИСОВКА ===
 // === ОТРИСОВКА ===
 function updateSpectrum() {
     if (!isSpectrumOpen) return;
@@ -168,8 +203,7 @@ function updateSpectrum() {
 
         if (z2 > -FOCAL_LENGTH + 10) {
             star.neighbors.forEach(n => {
-                if (n.node.z < star.z) return; // Рисуем один раз
-                // Вращаем соседа для проекции
+                if (n.node.z < star.z) return;
                 let nx1 = n.node.x * Math.cos(rotation.y) - n.node.z * Math.sin(rotation.y);
                 let nz1 = n.node.z * Math.cos(rotation.y) + n.node.x * Math.sin(rotation.y);
                 let ny2 = n.node.y * Math.cos(rotation.x) - nz1 * Math.sin(rotation.x);
@@ -195,20 +229,28 @@ function updateSpectrum() {
             }
         }
 
-        // Мерцание
+        // Мерцание для звезд, но НЕ для игрока
         let alpha = star.alpha;
-        if (star.type !== 'empty') alpha = 0.8 + Math.sin(scan3DState.animTime * 2 + star.x) * 0.2;
+        if (star.type !== 'empty' && !star.isPlayer) {
+             alpha = 0.8 + Math.sin(scan3DState.animTime * 2 + star.x) * 0.2;
+        }
 
         sp3dCtx.beginPath();
+        
+        // РАЗМЕР ТОЧКИ
         let r = star.radius * star.scale;
         
-        // Игрок пульсирует
-        if (star.isPlayer) r += Math.sin(scan3DState.animTime * 5) * 1.5;
+        // Игрок: фиксированный размер, без пульсации
+        if (star.isPlayer) {
+            r = 5 * star.scale; // Средний размер
+            alpha = 1;          // Всегда ярко
+        }
 
         sp3dCtx.arc(star.px, star.py, r, 0, Math.PI * 2);
         sp3dCtx.fillStyle = star.color;
         sp3dCtx.globalAlpha = alpha;
         
+        // Обводка выбранной цели
         if (scan3DState.selectedNode === star) {
             sp3dCtx.shadowBlur = 15; sp3dCtx.shadowColor = star.color; sp3dCtx.globalAlpha = 1;
             sp3dCtx.strokeStyle = star.color; sp3dCtx.lineWidth = 1; sp3dCtx.stroke();
@@ -243,40 +285,24 @@ function updateSpectrum() {
         });
     }
 
-    // 4. Отрисовка волны сканера (визуальное кольцо)
+    // 4. Отрисовка волны сканера
     if (scan3DState.active) {
         scan3DState.radius += 12;
-        
-        // Рисуем простое кольцо 2D, которое растет (как интерфейс HUD)
         sp3dCtx.beginPath();
         sp3dCtx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
         sp3dCtx.lineWidth = 2;
-        // Проецируем радиус примерно по центру (упрощение)
         const screenRad = scan3DState.radius * (FOCAL_LENGTH / (FOCAL_LENGTH + 0)); 
         sp3dCtx.arc(cx, cy, screenRad, 0, Math.PI*2);
         sp3dCtx.stroke();
 
         if (scan3DState.radius > scan3DState.maxRadius) {
             scan3DState.active = false; scan3DState.scanned = true;
-            btnScanAction.style.display = 'none';
+            btnScanAction.style.display = 'inline-block'; // Показываем кнопку снова (или скрываем, по желанию)
+            // Но в новой верстке мы просто меняем текст или состояние, кнопку можно оставить
         }
     }
-
-    // 5. Текст интерфейса (HUD внутри канваса)
-    sp3dCtx.font = "12px Share Tech Mono";
-    sp3dCtx.fillStyle = "#00e5ff";
-    sp3dCtx.fillText("СТАТУС СИСТЕМЫ: ОНЛАЙН", 20, sp3dCanvas.height - 40);
     
-    if (scan3DState.selectedNode) {
-        sp3dCtx.fillStyle = "#fff";
-        const jumps = scan3DState.route.length - 1;
-        sp3dCtx.fillText(`ЦЕЛЬ: ${scan3DState.selectedNode.type.toUpperCase()}`, 20, sp3dCanvas.height - 25);
-        if (jumps > 0) sp3dCtx.fillText(`РАССТОЯНИЕ: ${jumps} ПРЫЖКОВ`, 20, sp3dCanvas.height - 10);
-        else sp3dCtx.fillText(`МАРШРУТ НЕ НАЙДЕН`, 20, sp3dCanvas.height - 10);
-    } else {
-        sp3dCtx.fillStyle = "#555";
-        sp3dCtx.fillText("ЦЕЛЬ НЕ ВЫБРАНА", 20, sp3dCanvas.height - 25);
-    }
+    // ТЕКСТОВЫЕ ПЛАШКИ УДАЛЕНЫ ПОЛНОСТЬЮ
 }
 
 function perform3DScan() {
@@ -367,6 +393,5 @@ function engage3DRoute() {
     toggleSpectrum(false);
     
     const jumps = scan3DState.route.length - 1;
-    // Безопасный запуск: если мы не в карте, space.js переключит нас
     startAutoJumpSequence(jumps, scan3DState.selectedNode.type);
 }

@@ -31,6 +31,11 @@ function startGame() {
     setTimeout(() => { document.getElementById('mainMenu').style.display = "none"; }, 800);
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'flex';
+    
+    // ИСПРАВЛЕНИЕ: Принудительно включаем подсказки при старте
+    uiHint.style.display = 'block';
+    // Сбрасываем текст на дефолтный для корабля
+    update(); 
 }
 
 function startTransition(toState) {

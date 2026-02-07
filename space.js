@@ -20,7 +20,7 @@ window.stationZones = [];
 let warpFactor = 0, isWarping = false;
 const WARP_IDLE=0, WARP_CHARGE=1, WARP_JUMP=2, WARP_COAST=3, WARP_EXIT=4;
 let warpState = { phase: WARP_IDLE, timer: 0 };
-
+let btnErrorTimer = 0;
 // --- ЛОГИКА АВТО-ПРЫЖКА ---
 let autoJumpState = {
     active: false,
@@ -31,6 +31,16 @@ let autoJumpState = {
 function startAutoJumpSequence(count, targetType) {
     if (autoJumpState.active) return;
     
+    // ПРОВЕРКА ТОПЛИВА ПЕРЕД ЗАПУСКОМ
+    const fuel = getFuelCount();
+    if (fuel < count) {
+        jumpBtn.innerHTML = "ТРЕБУЕТСЯ ТОПЛИВО";
+        jumpBtn.style.color = "#ff1744";
+        jumpBtn.style.borderColor = "#ff1744";
+        btnErrorTimer = 60; // Показываем ошибку ~1 секунду (60 кадров)
+        return;
+    }
+
     autoJumpState.active = true;
     autoJumpState.jumpsLeft = count;
     autoJumpState.finalTargetType = targetType;
@@ -59,33 +69,49 @@ function initiateHyperJump(isAuto = false) {
     // ЗАЩИТА: Если мы не в режиме карты, переключаемся принудительно
     if (currentState !== STATE_MAP) {
         startTransition(STATE_MAP);
-        // Ждем завершения перехода, затем запускаем прыжок (через таймер)
         setTimeout(() => initiateHyperJump(isAuto), 1000);
         return;
     }
 
     if (isWarping) return;
-    if (isDocked) { alert("ОТСТЫКУЙТЕСЬ [F]"); return; }
-
-    const fuel = getFuelCount();
-    if (fuel < 1) { 
-        alert("НЕТ ТОПЛИВА! АВТОПИЛОТ ОТКЛЮЧЕН."); 
-        autoJumpState.active = false; 
+    
+    // 1. ПРОВЕРКА СТЫКОВКИ (БЕЗ ALERT)
+    if (isDocked) { 
+        jumpBtn.innerHTML = "ОТСТЫКУЙТЕСЬ [F]";
+        jumpBtn.style.color = "#ff1744";
+        btnErrorTimer = 60;
         return; 
     }
-    if (pendingJumpCost > 0 && player.credits < pendingJumpCost) { alert("НЕДОСТАТОЧНО КРЕДИТОВ (SC)!"); return; }
+
+    const fuel = getFuelCount();
+    
+    // 2. ПРОВЕРКА ТОПЛИВА (БЕЗ ALERT)
+    if (fuel < 1) { 
+        autoJumpState.active = false; // Тихо выключаем автопилот
+        jumpBtn.innerHTML = "НЕТ ТОПЛИВА";
+        jumpBtn.style.color = "#ff1744";
+        btnErrorTimer = 60;
+        return; 
+    }
+
+    // 3. ПРОВЕРКА КРЕДИТОВ (БЕЗ ALERT)
+    if (pendingJumpCost > 0 && player.credits < pendingJumpCost) { 
+        jumpBtn.innerHTML = "НЕТ СРЕДСТВ";
+        jumpBtn.style.color = "#ff1744";
+        btnErrorTimer = 60;
+        return; 
+    }
 
     consumeFuel(1);
     if (pendingJumpCost > 0) { player.credits -= pendingJumpCost; updateCurrencyUI(); }
 
-    // Сброс сканера (безопасная проверка)
+    // Сброс сканера
     if (typeof spectrumState !== 'undefined') {
         spectrumState.hasScanned = false;
         spectrumState.signals = [];
         spectrumState.lockedIndex = -1;
     }
 
-    // Подготовка перехода темы
     bgState.nextThemeIdx = Math.floor(Math.random() * SPACE_THEMES.length);
     if (bgState.nextThemeIdx === bgState.currentThemeIdx) {
         bgState.nextThemeIdx = (bgState.nextThemeIdx + 1) % SPACE_THEMES.length;
@@ -98,7 +124,7 @@ function initiateHyperJump(isAuto = false) {
     warpFactor = 0;
     
     chargeContainer.style.display = 'block'; 
-    chargeBar.style.backgroundColor = isAuto ? '#d500f9' : '#00e5ff'; // Фиолетовый бар для авто
+    chargeBar.style.backgroundColor = isAuto ? '#d500f9' : '#00e5ff'; 
     
     const btnText = isAuto ? `АВТОПИЛОТ (${autoJumpState.jumpsLeft})` : "ЗАРЯДКА ДВИГАТЕЛЯ...";
     jumpBtn.disabled = true; 
@@ -109,6 +135,10 @@ function initiateHyperJump(isAuto = false) {
 }
 
 function updateWarpLogic() {
+    if (btnErrorTimer > 0) {
+        btnErrorTimer--;
+        return; // Пропускаем обновление логики, пока висит ошибка на кнопке
+    }
     // --- ФИЗИКА СИСТЕМЫ (Звезда и Планеты) ---
     if (!isWarping && currentSystemType === 'system' && starSystem.active) {
         
@@ -255,14 +285,8 @@ function updateWarpLogic() {
             // Сбрасываем стыковку
             isDocked = false; 
             
-            // Сброс сканера (объект может быть пересоздан в spectrum.js, поэтому проверяем)
-            if (typeof spectrumState !== 'undefined') {
-                spectrumState = {
-                    hasScanned: false,
-                    signals: [],
-                    lockedIndex: -1
-                };
-            }
+            // ИСПРАВЛЕНИЕ: Сбрасываем данные сканера ТОЛЬКО после прыжка
+            if (window.resetSpectrum) window.resetSpectrum();
 
             // ЛОГИКА АВТО-ПРЫЖКА
             if (autoJumpState.active) {

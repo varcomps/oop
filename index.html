@@ -91,48 +91,75 @@
         #chargeBar { width: 0%; height: 100%; background: #00e5ff; box-shadow: 0 0 15px #00e5ff; transition: width 0.1s linear; }
 
         /* === 3D STAR MAP UI === */
-        #spectrumUI { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 180; align-items: center; justify-content: center; }
+        #spectrumUI { 
+            display: none; 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0, 0, 0, 0.8); 
+            z-index: 180; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+        }
         
+        .sp-window-container {
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        }
+
         .sp-3d-wrapper {
             position: relative;
             width: 800px; height: 600px;
-            border: 2px solid #333;
             background: #000;
-            box-shadow: 0 0 50px rgba(0, 229, 255, 0.1);
+            border: 2px solid #333;
+            border-bottom: none; 
         }
 
         canvas#sp3dCanvas { width: 100%; height: 100%; display: block; cursor: move; }
 
-        .sp-overlay-ui {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
-            display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box;
+        .sp-header-overlay {
+            position: absolute; top: 0; left: 0; width: 100%;
+            padding: 10px; box-sizing: border-box;
+            pointer-events: none;
+            display: flex; justify-content: flex-end;
         }
-
-        .sp-header-3d {
-            display: flex; justify-content: space-between; 
-            font-family: 'Orbitron'; color: #00e5ff; font-size: 14px; text-shadow: 0 0 5px #00e5ff;
-            background: rgba(0,0,0,0.5); padding: 5px;
+        .sp-close-btn {
+            pointer-events: auto; color: #555; font-weight: bold; cursor: pointer; font-family: 'Orbitron';
         }
+        .sp-close-btn:hover { color: #ff5252; }
 
-        .sp-bottom-controls {
-            display: flex; justify-content: flex-end; align-items: flex-end;
-            pointer-events: auto; 
+        .sp-control-frame {
+            width: 800px;
+            background: #222; 
+            border: 2px solid #333;
+            border-top: 1px solid #444;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center; 
+            gap: 20px;
         }
 
         .sp-btn {
-            background: rgba(0,0,0,0.8); border: 1px solid #00e5ff; color: #00e5ff;
-            padding: 10px 30px; font-family: 'Orbitron'; font-size: 14px; cursor: pointer;
-            transition: 0.2s; margin-left: 10px;
+            background: #333; 
+            border: 2px solid #555; 
+            color: #ccc;
+            padding: 12px 40px; 
+            font-family: 'Orbitron'; font-size: 16px; 
+            cursor: pointer;
+            transition: 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
-        .sp-btn:hover { background: #00e5ff; color: #000; }
+        .sp-btn:hover { background: #444; border-color: #00e5ff; color: #fff; }
         
         .sp-engage-btn {
-            display: none;
-            background: #d500f9; border-color: #ea80fc; color: #fff;
-            box-shadow: 0 0 15px #d500f9; font-weight: bold; font-size: 16px;
-            padding: 15px 40px;
+            display: none; 
+            background: #2a0e38; 
+            border-color: #d500f9; 
+            color: #ea80fc;
         }
-        .sp-engage-btn:hover { background: #aa00ff; transform: scale(1.05); }
+        .sp-engage-btn:hover { background: #d500f9; color: #fff; box-shadow: 0 0 20px #d500f9; }
 
         /* BUILD MENU */
         #buildMenu { 
@@ -168,7 +195,13 @@
         .mod-icon { width: 22px; height: 22px; background: #333; border: 1px solid #444; margin-right: 8px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #666; }
         .mod-info { display: flex; flex-direction: column; flex: 1; }
         .mod-name { font-size: 11px; font-weight: bold; text-transform: uppercase; }
-        #ui-hint { position: absolute; bottom: 30px; width: 100%; text-align: center; font-family: 'Orbitron', sans-serif; pointer-events: none; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; z-index: 100; }
+        #ui-hint { 
+            position: absolute; bottom: 30px; width: 100%; text-align: center; font-family: 'Orbitron', sans-serif; pointer-events: none; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; z-index: 100;
+            color: #ffffff; 
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            font-weight: bold;
+            font-size: 18px;
+        }
         .sector-normal { font-size: 16px; color: rgba(255, 255, 255, 0.4); text-shadow: 0 0 5px rgba(0, 0, 0, 0.5); }
         .sector-danger { font-size: 20px; font-weight: bold; color: rgba(255, 23, 68, 0.9); text-shadow: 0 0 15px rgba(255, 0, 0, 0.8); animation: dangerPulse 1s infinite alternate; }
         @keyframes dangerPulse { from { opacity: 0.7; transform: scale(1); } to { opacity: 1; transform: scale(1.05); } }
@@ -216,21 +249,18 @@
 </div>
 
 <div id="spectrumUI">
-    <div class="sp-3d-wrapper">
-        <canvas id="sp3dCanvas"></canvas>
-        
-        <div class="sp-overlay-ui">
-            <div class="sp-header-3d">
-                <span>КАРТА СЕКТОРА: ЛОКАЛЬНЫЙ КЛАСТЕР</span>
-                <span style="color:#666; cursor:pointer;" onclick="toggleSpectrum(false)">ЗАКРЫТЬ [ESC]</span>
-            </div>
+    <div class="sp-window-container">
+        <div class="sp-3d-wrapper">
+            <canvas id="sp3dCanvas"></canvas>
             
-            <div class="sp-bottom-controls">
-                <div>
-                    <button class="sp-btn" id="btnScanAction" onclick="perform3DScan()">СКАНИРОВАТЬ</button>
-                    <button class="sp-btn sp-engage-btn" id="btnEngage3D" onclick="engage3DRoute()">НАЧАТЬ ПРЫЖОК</button>
-                </div>
+            <div class="sp-header-overlay">
+                <span class="sp-close-btn" onclick="toggleSpectrum(false)">ЗАКРЫТЬ [ESC]</span>
             </div>
+        </div>
+
+        <div class="sp-control-frame">
+            <button class="sp-btn" id="btnScanAction" onclick="perform3DScan()">СКАНИРОВАТЬ</button>
+            <button class="sp-btn sp-engage-btn" id="btnEngage3D" onclick="engage3DRoute()">ПРЫЖОК</button>
         </div>
     </div>
 </div>
