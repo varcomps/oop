@@ -18,7 +18,7 @@ let time = 0;
 
 // Игрок (hullParts - инвентарь каркаса)
 // ИЗМЕНЕНИЕ: hullParts установлен в 0
-const player = { x: 0, y: 0, radius: 0.35, speed: 0.15, color: '#66bb6a', credits: 0.001, hullParts: 0 };
+const player = { x: 0, y: 0, radius: 0.35, speed: 0.15, color: '#66bb6a', credits: 0.1, hullParts: 0 };
 
 // Глобальные состояния
 let isDocked = false; 
