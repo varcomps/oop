@@ -27,7 +27,7 @@
 
         /* ОКНА */
         .ui-window { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #0b0b0d; border: 1px solid #444; box-shadow: 0 10px 50px rgba(0,0,0,0.9); z-index: 150; flex-direction: column; color: #ccc; transition: width 0.3s; }
-        .ui-header { padding: 12px 15px; background: #141416; border-bottom: 1px solid #333; font-family: 'Orbitron', sans-serif; font-size: 14px; display: flex; justify-content: space-between; color: #ccc; }
+        .ui-header { padding: 12px 15px; background: #141416; border-bottom: 1px solid #333; font-family: 'Orbitron', sans-serif; font-size: 14px; display: flex; justify-content: space-between; color: #ccc; flex-shrink: 0; }
         .ui-header span:first-child { color: #00e5ff; text-shadow: 0 0 8px rgba(0, 229, 255, 0.2); }
         .close-btn { cursor: pointer; color: #555; font-weight: bold; transition: 0.2s; font-size: 12px; }
         .close-btn:hover { color: #ff5252; }
@@ -89,6 +89,48 @@
         @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; box-shadow: 0 0 25px rgba(0, 229, 255, 0.5); } 100% { opacity: 0.8; } }
         #chargeBarContainer { width: 350px; height: 6px; background: #111; display: none; border: 1px solid #333; }
         #chargeBar { width: 0%; height: 100%; background: #00e5ff; box-shadow: 0 0 15px #00e5ff; transition: width 0.1s linear; }
+
+        /* === RADIO UI STYLES (FIXED) === */
+        #radioUI { 
+            width: 500px; 
+            height: 400px; /* Фиксированная высота */
+            display: none; 
+            flex-direction: column;
+            background: #0b0b0d;
+            border: 1px solid #444;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.9);
+            z-index: 150;
+        }
+        
+        .radio-body { 
+            display: flex; 
+            flex-direction: column; 
+            flex: 1; 
+            padding: 10px; 
+            background: #0f0f11; 
+            gap: 10px;
+            overflow: hidden; /* Важно: скрываем всё, что вылезает за пределы body */
+        }
+
+        .radio-log-container { 
+            flex: 1; /* Занимает всё оставшееся место */
+            background: #000; 
+            border: 1px solid #333; 
+            padding: 10px; 
+            font-family: 'Share Tech Mono', monospace; 
+            font-size: 12px; 
+            overflow-y: auto; /* Включаем вертикальный скролл */
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            min-height: 0; /* Фикс для Flexbox, чтобы скролл работал */
+        }
+        
+        .radio-controls { height: 60px; display: flex; gap: 10px; border-top: 1px solid #333; padding-top: 10px; flex-shrink: 0; }
+        .radio-btn { flex: 1; background: #1a1a1a; border: 1px solid #333; color: #888; font-family: 'Orbitron'; font-size: 12px; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .radio-btn:hover:not(:disabled) { background: #222; border-color: #555; color: #fff; }
+        .radio-btn.btn-sos { border-color: #5d1010; background: #2b0b0b; color: #ff5252; }
+        .radio-btn.btn-sos:hover:not(:disabled) { background: #ff1744; color: #000; box-shadow: 0 0 15px #ff1744; }
+        .cost-sub { font-size: 10px; opacity: 0.7; margin-top: 4px; }
+        .sub-cost { font-size: 10px; opacity: 0.7; margin-top: 4px; }
 
         /* === 3D STAR MAP UI === */
         #spectrumUI { 
@@ -260,7 +302,7 @@
 
         <div class="sp-control-frame">
             <button class="sp-btn" id="btnScanAction" onclick="perform3DScan()">СКАНИРОВАТЬ</button>
-            <button class="sp-btn sp-engage-btn" id="btnEngage3D" onclick="engage3DRoute()">ПРЫЖОК</button>
+            <button class="sp-btn" onclick="clear3DTarget()">СБРОС ЦЕЛИ</button>
         </div>
     </div>
 </div>
@@ -307,12 +349,37 @@
 </div>
 
 <div id="mapUI">
-    <button id="dockBtn" onclick="handleDockingInteraction()">СТЫКОВКА [F]</button>
-    <button id="jumpBtn" class="jump-btn" onclick="initiateHyperJump()">
-        ГИПЕРПРЫЖОК
-        <span class="btn-sub">СТАТУС: ГОТОВ</span>
-    </button>
+    <button id="dockBtn" onclick="handleDockingInteraction()">DOCK [F]</button>
+    
+    <div style="display:flex; gap:10px; align-items:flex-end;">
+        <button id="jumpBtn" class="jump-btn" onclick="initiateHyperJump(false, false)">
+            HYPERJUMP
+            <span class="btn-sub">STATUS: READY</span>
+        </button>
+        <button id="jumpBtnPremium" class="jump-btn" onclick="initiateHyperJump(false, true)" 
+                style="width: auto; min-width: 120px; border-color: #ffd700; color: #ffd700; font-size: 14px;">
+            SUPER JUMP
+            <span class="btn-sub" style="color:#eebb00">STABLE</span>
+        </button>
+    </div>
+    
     <div id="chargeBarContainer"><div id="chargeBar"></div></div>
+</div>
+
+<div id="radioUI" class="ui-window">
+    <div class="ui-header">
+        <span>СИСТЕМА СВЯЗИ</span>
+        <span class="close-btn" onclick="toggleRadio(false)">ЗАКРЫТЬ [ESC]</span>
+    </div>
+    <div class="radio-body">
+        <div class="radio-log-container" id="radioLog"></div>
+        <div class="radio-controls">
+            <button class="radio-btn btn-sos" onclick="requestDistressCall()">
+                <span>АВАРИЙНЫЙ МАЯК (SOS)</span>
+                <span class="cost-sub">0.0010 SC</span>
+            </button>
+        </div>
+    </div>
 </div>
 
 <div id="ui-hint"></div>
@@ -328,6 +395,7 @@
 <script src="space_core.js"></script>
 <script src="spectrum.js"></script>
 <script src="market.js"></script> 
+<script src="radio.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

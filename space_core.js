@@ -1,5 +1,9 @@
+
+/* space_core.js - Исправлен сброс сканера: теперь он очищается при ЛЮБОМ прыжке */
+
 const mapUI = document.getElementById('mapUI');
 const jumpBtn = document.getElementById('jumpBtn');
+const jumpBtnPremium = document.getElementById('jumpBtnPremium'); 
 const dockBtn = document.getElementById('dockBtn');
 const chargeBar = document.getElementById('chargeBar');
 const chargeContainer = document.getElementById('chargeBarContainer');
@@ -14,12 +18,11 @@ let warpState = { phase: WARP_IDLE, timer: 0 };
 let btnErrorTimer = 0;
 
 // --- ЛОГИКА АВТО-ПРЫЖКА ---
-let autoJumpState = { active: false, jumpsLeft: 0, finalTargetType: null };
+let autoJumpState = { active: false, jumpsLeft: 0, finalTargetType: null, usePremium: false };
 
-function startAutoJumpSequence(count, targetType) {
+function startAutoJumpSequence(count, targetType, usePremium = false) {
     if (autoJumpState.active) return;
     
-    // ЗАЩИТА ОТ ЗАПУСКА ПРИ СТЫКОВКЕ
     if (isDocked) {
         jumpBtn.innerHTML = "ОТСТЫКУЙТЕСЬ [F]";
         jumpBtn.style.color = "#ff1744";
@@ -27,70 +30,107 @@ function startAutoJumpSequence(count, targetType) {
         return;
     }
 
-    const fuel = getFuelCount();
-    if (fuel < count) {
-        jumpBtn.innerHTML = "ТРЕБУЕТСЯ ТОПЛИВО";
-        jumpBtn.style.color = "#ff1744";
-        jumpBtn.style.borderColor = "#ff1744";
-        btnErrorTimer = 60;
+    const fuelAvailable = usePremium ? window.getPremiumFuelCount() : window.getFuelCount();
+
+    if (fuelAvailable < count) {
+        const btn = usePremium ? jumpBtnPremium : jumpBtn;
+        if(btn) {
+            const oldText = btn.innerHTML;
+            btn.innerHTML = "НЕТ ТОПЛИВА";
+            btn.style.color = "#ff1744";
+            btn.style.borderColor = "#ff1744";
+            setTimeout(() => { 
+                btn.innerHTML = oldText; 
+                btn.style.color = usePremium ? "#ffd700" : "#ff5252"; 
+                btn.style.borderColor = usePremium ? "#ffd700" : "#ff5252";
+            }, 1500);
+        }
         return;
     }
+
     autoJumpState.active = true;
     autoJumpState.jumpsLeft = count;
     autoJumpState.finalTargetType = targetType;
-    executeAutoJumpStep();
+    autoJumpState.usePremium = usePremium; 
+    
+    initiateHyperJump(true, autoJumpState.usePremium); 
 }
 
-function executeAutoJumpStep() {
-    if (!autoJumpState.active) return;
-    if (autoJumpState.jumpsLeft > 1) nextJumpTarget = null; 
-    else nextJumpTarget = autoJumpState.finalTargetType;
-    initiateHyperJump(true); 
-}
-
-function initiateHyperJump(isAuto = false) {
+function initiateHyperJump(isAuto = false, usePremium = false) {
     if (currentState !== STATE_MAP) {
         startTransition(STATE_MAP);
-        setTimeout(() => initiateHyperJump(isAuto), 1000);
+        setTimeout(() => initiateHyperJump(isAuto, usePremium), 1000);
         return;
     }
     if (isWarping) return;
     
-    // ЗАЩИТА: Нельзя прыгать при стыковке
     if (isDocked) { 
-        jumpBtn.innerHTML = "ОТСТЫКУЙТЕСЬ [F]"; jumpBtn.style.color = "#ff1744"; btnErrorTimer = 60; return; 
+        jumpBtn.innerHTML = "ОТСТЫКУЙТЕСЬ"; 
+        btnErrorTimer = 60; return; 
+    }
+
+    if (!isAuto && window.activeAutopilotRoute) {
+        const route = window.activeAutopilotRoute;
+        startAutoJumpSequence(route.jumpsRequired, route.targetType, usePremium);
+        return;
     }
     
-    const fuel = getFuelCount();
-    if (fuel < 1) { 
-        autoJumpState.active = false; jumpBtn.innerHTML = "НЕТ ТОПЛИВА"; jumpBtn.style.color = "#ff1744"; btnErrorTimer = 60; return; 
+    if (!isAuto) {
+        let hasFuel = false;
+        if (usePremium) {
+            if (window.getPremiumFuelCount() >= 1) hasFuel = true;
+        } else {
+            if (window.getFuelCount() >= 1) hasFuel = true;
+        }
+
+        if (!hasFuel) {
+            jumpBtn.innerHTML = "НЕТ ТОПЛИВА";
+            return;
+        }
     }
-    if (pendingJumpCost > 0 && player.credits < pendingJumpCost) { 
-        jumpBtn.innerHTML = "НЕТ СРЕДСТВ"; jumpBtn.style.color = "#ff1744"; btnErrorTimer = 60; return; 
+
+    if (window.consumeSpecificFuel) {
+        window.consumeSpecificFuel(usePremium ? 'premium' : 'normal');
+    } else {
+        consumeFuel(1);
+    }
+    
+    if (isAuto && autoJumpState.active) {
+        autoJumpState.jumpsLeft--;
     }
 
-    consumeFuel(1);
-    if (pendingJumpCost > 0) { player.credits -= pendingJumpCost; updateCurrencyUI(); }
-    if (typeof spectrumState !== 'undefined') { spectrumState.hasScanned = false; spectrumState.signals = []; spectrumState.lockedIndex = -1; }
-
-    // ГЕНЕРАЦИЯ НОВОЙ СЛУЧАЙНОЙ ТЕМЫ ДЛЯ СЛЕДУЮЩЕГО СЕКТОРА
-    bgState.nextTheme = generateRandomTheme();
-    bgState.progress = 0;
-
-    isWarping = true; warpState.phase = WARP_CHARGE; warpState.timer = 0; warpFactor = 0;
+    isWarping = true; 
+    warpState.phase = WARP_CHARGE; 
+    warpState.timer = 0; 
+    warpFactor = 0;
+    
     chargeContainer.style.display = 'block'; 
-    chargeBar.style.backgroundColor = isAuto ? '#d500f9' : '#00e5ff'; 
+    
+    let barColor = '#00e5ff';
+    if (usePremium) barColor = '#ffd700';
+    else if (isAuto) barColor = '#d500f9';
+    
+    chargeBar.style.backgroundColor = barColor;
+    chargeBar.style.boxShadow = `0 0 15px ${barColor}`;
+
     jumpBtn.disabled = true; 
-    jumpBtn.innerHTML = isAuto ? `АВТОПИЛОТ (${autoJumpState.jumpsLeft})` : "ЗАРЯДКА ДВИГАТЕЛЯ...";
-    jumpBtn.style.color = isAuto ? "#d500f9" : "#ff5252"; 
-    jumpBtn.style.borderColor = "#ff5252";
-    isDocked = false; dockBtn.style.display = 'none';
+    if(jumpBtnPremium) jumpBtnPremium.disabled = true;
+
+    if (isAuto) {
+        const btn = usePremium ? jumpBtnPremium : jumpBtn;
+        if(btn) btn.innerHTML = `АВТОПИЛОТ: ${autoJumpState.jumpsLeft + 1} >>`; 
+    } else {
+        jumpBtn.innerHTML = "ЗАРЯДКА...";
+    }
+    
+    warpState.isPremiumJump = usePremium; 
+    isDocked = false; 
+    dockBtn.style.display = 'none';
 }
 
 function updateWarpLogic() {
     if (btnErrorTimer > 0) { btnErrorTimer--; return; }
 
-    // ФИЗИКА ТЕКУЩЕЙ СИСТЕМЫ
     if (!isWarping) {
         if (currentSystemType === 'system') updateSystemPhysics();
         else if (currentSystemType === 'black_hole') updateBlackHolePhysics();
@@ -100,80 +140,206 @@ function updateWarpLogic() {
         if (isDocked) {
              jumpBtn.innerHTML = "СИСТЕМА: СТЫКОВКА"; jumpBtn.disabled = true; 
              jumpBtn.style.borderColor = "#444"; jumpBtn.style.color = "#555";
+             if(jumpBtnPremium) {
+                 jumpBtnPremium.disabled = true;
+                 jumpBtnPremium.style.borderColor = "#444";
+                 jumpBtnPremium.style.color = "#555";
+             }
         } else {
             const fuel = getFuelCount();
-            if (fuel > 0) {
-                 jumpBtn.innerHTML = "ГИПЕРПРЫЖОК"; jumpBtn.disabled = false; jumpBtn.style.borderColor = "#ff5252"; jumpBtn.style.color = "#ff5252";
+            const premFuel = window.getPremiumFuelCount ? window.getPremiumFuelCount() : 0;
+            
+            if (fuel > 0) jumpBtn.disabled = false;
+            else { jumpBtn.disabled = true; jumpBtn.style.removeProperty('border-color'); }
+            
+            if(jumpBtnPremium) {
+                if (premFuel > 0) jumpBtnPremium.disabled = false;
+                else jumpBtnPremium.disabled = true;
+            }
+
+            if (window.activeAutopilotRoute) {
+                 const jumps = window.activeAutopilotRoute.jumpsRequired;
+                 let target = window.activeAutopilotRoute.targetType;
+                 if (target === 'station') target = 'СТАНЦИЯ';
+                 else if (target === 'system') target = 'СИСТЕМА';
+                 else if (target === 'black_hole') target = 'ДЫРА';
+                 else target = target.toUpperCase();
+                 
+                 if (fuel >= jumps) {
+                     jumpBtn.innerHTML = `АВТОПИЛОТ: ${target} (${jumps})`;
+                     jumpBtn.style.borderColor = "#d500f9"; jumpBtn.style.color = "#ea80fc";
+                 } else {
+                     jumpBtn.innerHTML = `НУЖНО ТОПЛИВО (${fuel}/${jumps})`;
+                     jumpBtn.style.borderColor = "#ff1744"; jumpBtn.style.color = "#ff1744"; jumpBtn.disabled = true;
+                 }
+
+                 if(jumpBtnPremium) {
+                     if (premFuel >= jumps) {
+                         jumpBtnPremium.innerHTML = `С-ПИЛОТ: ${target}`;
+                         jumpBtnPremium.style.borderColor = "#ffd700"; jumpBtnPremium.style.color = "#ffd700";
+                         const sub = jumpBtnPremium.querySelector('.btn-sub');
+                         if(sub) { sub.innerText = `(${jumps}) ЗАМОРОЖЕНО`; sub.style.color = "#fff"; }
+                     } else {
+                         jumpBtnPremium.innerHTML = `НЕТ ТОПЛИВА`;
+                         jumpBtnPremium.style.borderColor = "#ff1744"; jumpBtnPremium.style.color = "#ff1744"; jumpBtnPremium.disabled = true;
+                     }
+                 }
             } else {
-                 jumpBtn.innerHTML = "НЕТ ТОПЛИВА"; jumpBtn.disabled = true; jumpBtn.style.removeProperty('border-color');
+                 if (fuel > 0) {
+                    jumpBtn.innerHTML = "ГИПЕРПРЫЖОК";
+                    jumpBtn.style.borderColor = "#ff5252"; jumpBtn.style.color = "#ff5252";
+                 } else {
+                    jumpBtn.innerHTML = "НЕТ ТОПЛИВА";
+                 }
+                 if(jumpBtnPremium) {
+                     const sub = jumpBtnPremium.querySelector('.btn-sub');
+                     if(sub) { sub.innerText = "СТАБ."; sub.style.color = "#eebb00"; }
+                     
+                     if(premFuel > 0) {
+                         jumpBtnPremium.innerHTML = "SUPER JUMP"; 
+                         jumpBtnPremium.style.borderColor = "#ffd700"; jumpBtnPremium.style.color = "#ffd700";
+                         if(sub) jumpBtnPremium.appendChild(sub); 
+                     } else {
+                         jumpBtnPremium.innerHTML = "НЕТ ТОПЛИВА"; 
+                         jumpBtnPremium.style.borderColor = "#444"; jumpBtnPremium.style.color = "#555";
+                     }
+                 }
             }
         }
         return;
     }
 
-    // ЛОГИКА ФАЗ ВАРПА
     if (warpState.phase === WARP_CHARGE) {
         warpState.timer++; warpFactor = (warpState.timer / 100) * 1; 
         chargeBar.style.width = (warpState.timer)+'%';
-        if (warpState.timer >= 100) { warpState.phase = WARP_JUMP; warpState.timer = 0; jumpBtn.innerHTML = "ПРЫЖОК!"; }
+        
+        if (warpState.timer >= 100) { 
+            warpState.phase = WARP_JUMP; 
+            warpState.timer = 0; 
+            if (!autoJumpState.active) jumpBtn.innerHTML = "ПРЫЖОК!"; 
+        }
     } 
     else if (warpState.phase === WARP_JUMP) {
         warpState.timer++; warpFactor += 2 + (warpFactor * 0.1); 
         bgState.progress = Math.min(0.5, bgState.progress + 0.01);
-        if (warpFactor > 150) { warpFactor = 150; warpState.phase = WARP_COAST; warpState.timer = 0; }
+        if (warpFactor > 150) { 
+            warpFactor = 150; 
+            warpState.phase = WARP_COAST; 
+            warpState.timer = 0; 
+        }
     } 
     else if (warpState.phase === WARP_COAST) {
         warpState.timer++; 
-        if (warpState.timer === 20) { currentSystemType = null; jumpBtn.innerHTML = "В ПУТИ..."; }
+        
+        if (warpState.timer === 20) { 
+            currentSystemType = null; 
+            if (!autoJumpState.active) jumpBtn.innerHTML = "В ПУТИ..."; 
+        }
+        
         if (warpState.timer > 80) { 
-            warpState.phase = WARP_EXIT; warpState.timer = 0; 
-            currentSystemType = nextJumpTarget;
+            warpState.phase = WARP_EXIT; 
+            warpState.timer = 0; 
             
-            // ГЕНЕРАЦИЯ НОВОЙ ЛОКАЦИИ
-            if (currentSystemType === 'station') {
-                station.x = Math.random() * canvas.width; station.y = Math.random() * canvas.height; station.visible = true;
-                generateStation();
-            } else if (currentSystemType === 'system') {
-                generateRealRandomSystem(); 
-            } else if (currentSystemType === 'black_hole') {
-                generateBlackHole();
+            // --- ИСПРАВЛЕНИЕ: Промежуточные сектора ---
+            if (autoJumpState.active && autoJumpState.jumpsLeft > 0) {
+                // Если мы в автопилоте и это не последний прыжок - система НЕ генерируется
+                currentSystemType = null; 
+            } 
+            else {
+                // Финальная цель или ручной прыжок - генерируем систему
+                currentSystemType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
+                
+                if (currentSystemType === 'station') {
+                    station.x = Math.random() * canvas.width; station.y = Math.random() * canvas.height; station.visible = true;
+                    generateStation();
+                } else if (currentSystemType === 'system') {
+                    generateRealRandomSystem(); 
+                } else if (currentSystemType === 'black_hole') {
+                    generateBlackHole();
+                } else {
+                    generateRealRandomSystem();
+                }
             }
-            nextJumpTarget = null; pendingJumpCost = 0; jumpBtn.innerHTML = "ПРИБЫТИЕ..."; 
+            
+            if (!autoJumpState.active) jumpBtn.innerHTML = "ПРИБЫТИЕ..."; 
         }
     } 
     else if (warpState.phase === WARP_EXIT) {
-        warpFactor *= 0.90; bgState.progress = Math.min(1.0, bgState.progress + 0.015);
+        warpFactor *= 0.90; 
+        bgState.progress = Math.min(1.0, bgState.progress + 0.015);
+        
         if (warpFactor < 0.1) {
-            warpFactor = 0; isWarping = false; isDocked = false; 
-            if (window.resetSpectrum) window.resetSpectrum();
-
-            if (autoJumpState.active) {
-                autoJumpState.jumpsLeft--;
-                if (autoJumpState.jumpsLeft > 0) {
-                    jumpBtn.innerHTML = `ПОДГОТОВКА ПРЫЖКА (${autoJumpState.jumpsLeft})...`;
-                    setTimeout(() => executeAutoJumpStep(), 1500);
-                } else {
-                    autoJumpState.active = false; jumpBtn.innerHTML = "ПУНКТ НАЗНАЧЕНИЯ";
-                    setTimeout(() => { jumpBtn.innerHTML = "ГИПЕРПРЫЖОК"; jumpBtn.disabled = false; }, 2000);
-                }
-            } else {
-                jumpBtn.disabled = false; jumpBtn.innerHTML = "ГИПЕРПРЫЖОК"; 
-            }
             
+            if (autoJumpState.active && autoJumpState.jumpsLeft > 0) {
+                if (window.consumeSpecificFuel) {
+                    window.consumeSpecificFuel(autoJumpState.usePremium ? 'premium' : 'normal');
+                } else {
+                    consumeFuel(1);
+                }
+                
+                autoJumpState.jumpsLeft--;
+                
+                const btn = autoJumpState.usePremium ? jumpBtnPremium : jumpBtn;
+                if(btn) btn.innerHTML = `АВТОПИЛОТ: ${autoJumpState.jumpsLeft} >>`;
+
+                warpState.phase = WARP_CHARGE;
+                warpState.timer = 0;
+                warpFactor = 0;
+                chargeBar.style.width = '0%';
+                
+                bgState.currentTheme = bgState.nextTheme;
+                bgState.nextTheme = generateRandomTheme();
+                bgState.progress = 0;
+                
+                return; 
+            }
+
+            warpFactor = 0; 
+            isWarping = false; 
+            isDocked = false; 
+
+            // --- ИСПРАВЛЕНИЕ: СБРОС СПЕКТРА ПРИ ЛЮБОМ ПРИБЫТИИ ---
+            // Вынесли за пределы if(autoJumpState.active), чтобы работало и при ручном прыжке
+            if (window.resetSpectrum) window.resetSpectrum();
+            // -----------------------------------------------------
+            
+            if (autoJumpState.active) {
+                autoJumpState.active = false;
+                window.activeAutopilotRoute = null; 
+            }
+
+            jumpBtn.disabled = false; jumpBtn.innerHTML = "ГИПЕРПРЫЖОК"; 
+            if(jumpBtnPremium) jumpBtnPremium.disabled = false;
+
             warpState.phase = WARP_IDLE;
             chargeContainer.style.display = 'none'; chargeBar.style.width = '0%'; 
             
-            // ФИКСАЦИЯ НОВОЙ ТЕМЫ КАК ТЕКУЩЕЙ
             bgState.currentTheme = bgState.nextTheme; 
             bgState.progress = 0;
 
-            if(window.updateGlobalPrices) updateGlobalPrices();
+            if(window.updateGlobalPrices) {
+                window.updateGlobalPrices(warpState.isPremiumJump);
+            }
+            
+            if (warpState.isPremiumJump) {
+                if(uiHint) {
+                    const old = uiHint.innerHTML;
+                    uiHint.innerHTML = "<span style='color:#ffd700'>РЫНОК СТАБИЛИЗИРОВАН (ЦЕНЫ ЗАМОРОЖЕНЫ)</span>";
+                    setTimeout(() => uiHint.innerHTML = old, 3000);
+                }
+            }
+
+            // Запускаем радио только если это не промежуточный прыжок (мы уже прибыли)
+            // И если прыжок был не супер-стабильным
+            if (!warpState.isPremiumJump && window.checkIncomingTransmission) {
+                window.checkIncomingTransmission();
+            }
+
             if (currentSystemType === 'station' && window.generateStationInventory) {
                 if (window.marketState && (!window.marketState.items || window.marketState.items.length === 0)) if(window.initMarket) initMarket();
                 generateStationInventory();
             }
             
-            // Телепорт в центр если улетели далеко
             if (mapShip.x < -1000 || mapShip.x > canvas.width + 1000 || mapShip.y < -1000 || mapShip.y > canvas.height + 1000) {
                  mapShip.x = canvas.width/2; mapShip.y = canvas.height/2; mapShip.vx = 0; mapShip.vy = 0;
             }
@@ -181,78 +347,33 @@ function updateWarpLogic() {
     }
 }
 
-// --- СЛУЧАЙНАЯ ГЕНЕРАЦИЯ ФОНА ---
-
-// Вспомогательная функция для случайного числа в диапазоне
-function randInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// Преобразование RGB в HEX
-function rgbToHex(r, g, b) {
-    return "#" + ((1 << 24) + (r << 16) + (g << 8) + (b | 0)).toString(16).slice(1);
-}
-
-// Парсинг HEX в RGB
-function hexToRgb(hex) {
-    const bigint = parseInt(hex.replace('#', ''), 16);
-    return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
-}
-
-// Линейная интерполяция цвета
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function rgbToHex(r, g, b) { return "#" + ((1 << 24) + (r << 16) + (g << 8) + (b | 0)).toString(16).slice(1); }
+function hexToRgb(hex) { const bigint = parseInt(hex.replace('#', ''), 16); return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255]; }
 function lerpColor(c1, c2, t) {
-    const rgb1 = hexToRgb(c1);
-    const rgb2 = hexToRgb(c2);
+    const rgb1 = hexToRgb(c1); const rgb2 = hexToRgb(c2);
     const r = Math.round(rgb1[0] + (rgb2[0] - rgb1[0]) * t);
     const g = Math.round(rgb1[1] + (rgb2[1] - rgb1[1]) * t);
     const b = Math.round(rgb1[2] + (rgb2[2] - rgb1[2]) * t);
     return rgbToHex(r, g, b);
 }
-
-// Генератор случайной темы
 function generateRandomTheme() {
-    // Фон всегда темный (значения 0-25) для реалистичности космоса
-    // Но с легким оттенком (чуть больше красного, синего или зеленого)
-    const rBg = randInt(0, 20);
-    const gBg = randInt(0, 20);
-    const bBg = randInt(0, 25); 
+    const rBg = randInt(0, 20); const gBg = randInt(0, 20); const bBg = randInt(0, 25); 
     const bg = rgbToHex(rBg, gBg, bBg);
-
-    // Цвета звезд/туманностей - яркие и насыщенные (50-255)
-    const colors = [];
-    for(let i = 0; i < 3; i++) {
-        colors.push(rgbToHex(randInt(50, 255), randInt(50, 255), randInt(50, 255)));
-    }
-
+    const colors = []; for(let i = 0; i < 3; i++) colors.push(rgbToHex(randInt(50, 255), randInt(50, 255), randInt(50, 255)));
     return { bg, colors };
 }
 
-// Состояние фона
-let bgState = { 
-    currentTheme: generateRandomTheme(), 
-    nextTheme: generateRandomTheme(), 
-    progress: 0, 
-    stars: [], 
-    nebula: [] 
-};
+let bgState = { currentTheme: generateRandomTheme(), nextTheme: generateRandomTheme(), progress: 0, stars: [], nebula: [] };
 
-// Функция получения текущей палитры (смешивание между current и next)
 function getInterpolatedPalette(t) {
-    const t1 = bgState.currentTheme;
-    const t2 = bgState.nextTheme;
-    
-    // Смешиваем фон
+    const t1 = bgState.currentTheme; const t2 = bgState.nextTheme;
     const bg = lerpColor(t1.bg, t2.bg, t);
-    
-    // Смешиваем цвета звезд (массивы могут быть разной длины, берем макс)
-    const colors = [];
-    const len = Math.max(t1.colors.length, t2.colors.length);
+    const colors = []; const len = Math.max(t1.colors.length, t2.colors.length);
     for(let i = 0; i < len; i++) {
-        const c1 = t1.colors[i % t1.colors.length];
-        const c2 = t2.colors[i % t2.colors.length];
+        const c1 = t1.colors[i % t1.colors.length]; const c2 = t2.colors[i % t2.colors.length];
         colors.push(lerpColor(c1, c2, t));
     }
-    
     return { bg, colors };
 }
 

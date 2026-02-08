@@ -29,7 +29,7 @@ const COMMODITY_DB = [
     { id: 'c18', name: 'Fuel Rods',     base: 0.0040, min: 0.0025, max: 0.0080, step: 0.0005 },
     { id: 'c19', name: 'Circuitry',     base: 0.0035, min: 0.0020, max: 0.0070, step: 0.0005 },
     { id: 'c20', name: 'Optics',        base: 0.0045, min: 0.0030, max: 0.0090, step: 0.0006 },
-    { id: 'c21', name: 'Microchips',    base: 0.0050, min: 0.0030, max: 0.0100, step: 0.0010 },
+    { id: 'c21', name: 'Microchips',    base: 0.0050, min: 0.0030, max: 0.0100, step: 0.0010 }, 
     { id: 'c22', name: 'Solar Cells',   base: 0.0060, min: 0.0040, max: 0.0120, step: 0.0010 },
     { id: 'c23', name: 'Batteries',     base: 0.0055, min: 0.0035, max: 0.0110, step: 0.0010 },
     { id: 'c24', name: 'Sensor Arrays', base: 0.0080, min: 0.0050, max: 0.0150, step: 0.0015 },
@@ -109,16 +109,54 @@ function initMarket() {
     }
 }
 
-function updateGlobalPrices() {
+// В market.js
+
+function updateGlobalPrices(freezePrices = false) {
+    // 1. Если это ПРЕМИУМ прыжок, цены НЕ меняются
+    if (freezePrices) {
+        // Мы не меняем цены, но мы должны удалить слух, если игрок его не использовал?
+        // Нет, пусть слух висит, пока не произойдет ОБЫЧНЫЙ прыжок.
+        // Это позволяет "довезти" слух до нужного места используя супер-топливо.
+        console.log("Market prices frozen by Super Fuel.");
+        return; 
+    }
+
+    // 2. Обычное обновление цен
     marketState.items.forEach(item => {
         let change = (Math.random() - 0.5) * item.step * 2;
-        let newPrice = item.price + change;
-        if (newPrice < item.min) newPrice = item.min;
-        if (newPrice > item.max) newPrice = item.max;
-        item.price = newPrice;
-        item.history.push(newPrice);
+        
+        // --- ЛОГИКА СЛУХОВ ---
+        if (window.activeMarketRumor && window.activeMarketRumor.id === item.id) {
+            // Применяем инсайд
+            const mult = window.activeMarketRumor.multiplier;
+            console.log(`Rumor realized for ${item.name}: x${mult}`);
+            
+            // Если множитель > 1 (рост), прибавляем много. Если < 1 (крэш), вычитаем.
+            // Для простоты просто умножим текущую цену, но с проверкой границ
+            let newP = item.price * mult;
+            
+            // Немного рандома, чтобы не было ровно x3.0
+            newP = newP * (0.9 + Math.random() * 0.2); 
+            
+            item.price = newP;
+        } else {
+            // Обычное изменение
+            item.price += change;
+        }
+
+        // Границы
+        if (item.price < item.min) item.price = item.min;
+        // Для слухов можно пробить MAX, это же аномалия
+        if (!window.activeMarketRumor || window.activeMarketRumor.id !== item.id) {
+            if (item.price > item.max) item.price = item.max;
+        }
+        
+        item.history.push(item.price);
         if (item.history.length > 10) item.history.shift();
     });
+
+    // После обычного прыжка слух сгорает
+    window.activeMarketRumor = null;
 }
 
 function generateStationInventory() {

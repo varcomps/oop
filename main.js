@@ -1,3 +1,5 @@
+/* main.js - Убрана подсказка [R] COMMS */
+
 // Глобальный флаг правой кнопки (для перетаскивания удаления)
 let isRightMouseDown = false;
 
@@ -32,19 +34,23 @@ function startGame() {
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'flex';
     
-    // ИСПРАВЛЕНИЕ: Принудительно включаем подсказки при старте
     uiHint.style.display = 'block';
-    // Сбрасываем текст на дефолтный для корабля
     update(); 
 }
 
 function startTransition(toState) {
     if (transition.active) return;
     transition.active = true; transition.alpha = 0; transition.direction = 1; transition.targetState = toState;
+    
+    // Закрываем все окна при переходе
     if (isBuildMenuOpen) tryToggleBuildMenu(); 
     if (isStorageOpen) toggleStorage(false);
     if (isSpectrumOpen && window.toggleSpectrum) toggleSpectrum(false);
     if (isMarketOpen && window.toggleMarket) toggleMarket(false);
+    
+    // --- НОВОЕ: Закрываем радио при переходе ---
+    if (typeof isRadioOpen !== 'undefined' && isRadioOpen) toggleRadio(false);
+
     uiHint.style.display = 'none'; inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
 }
 
@@ -150,7 +156,10 @@ function update() {
         if (!isBuildMenuOpen) { viewOffset.x = canvas.width / 2 - player.x; viewOffset.y = canvas.height / 2 - player.y; }
         
         let dx = 0, dy = 0; const moveSpeed = player.speed * TILE_SIZE;
-        if (!isBuildMenuOpen && !isStorageOpen && !isSpectrumOpen && !isMarketOpen) {
+        // Блокируем движение, если открыто любое UI
+        const isAnyUIOpen = isBuildMenuOpen || isStorageOpen || isSpectrumOpen || isMarketOpen || (typeof isRadioOpen !== 'undefined' && isRadioOpen);
+        
+        if (!isAnyUIOpen) {
             if (inputs.up) dy = -moveSpeed; if (inputs.down) dy = moveSpeed;
             if (inputs.left) dx = -moveSpeed; if (inputs.right) dx = moveSpeed;
         }
@@ -168,11 +177,12 @@ function update() {
             interactables.airlock.active = airlock && Math.hypot(player.x - (airlock.x + airlock.w/2) * TILE_SIZE, player.y - (airlock.y + airlock.h/2) * TILE_SIZE) < TILE_SIZE * 1.5;
 
             let hintText = "";
-            if (interactables.bridge.active) hintText = "<span class='hl'>[ E ]</span> МОСТИК <span class='hl'>[ M ]</span> СПЕКТР";
+            if (interactables.bridge.active) hintText = "<span class='hl'>[ E ]</span> МОСТИК <span class='hl'>[ M ]</span> СПЕКТР <span class='hl'>[ R ]</span> СВЯЗЬ";
             else if (interactables.storage.active) hintText = "<span class='hl'>[ E ]</span> ГРУЗОВОЙ ОТСЕК";
             else if (interactables.airlock.active && isDocked) hintText = "<span class='hl'>[ E ]</span> ВЫХОД НА СТАНЦИЮ";
             else if (interactables.airlock.active && !isDocked) hintText = "<span style='color:red'>ШЛЮЗ ЗАБЛОКИРОВАН (НЕТ СТЫКОВКИ)</span>";
-            if (!isBuildMenuOpen && !isStorageOpen && !isSpectrumOpen) uiHint.innerHTML = hintText; else uiHint.innerHTML = "";
+            
+            if (!isAnyUIOpen) uiHint.innerHTML = hintText; else uiHint.innerHTML = "";
         } else {
              const airlock = installedModules.find(m => m.type === 'airlock');
              let nearShip = airlock && Math.hypot(player.x - (airlock.x + airlock.w/2) * TILE_SIZE, player.y - (airlock.y + airlock.h/2) * TILE_SIZE) < TILE_SIZE * 2.5;
@@ -185,7 +195,7 @@ function update() {
              const comm = stationModules.find(m => m.type === 'commodities_terminal');
              interactables.commodities.active = comm && Math.hypot(player.x - (comm.x + comm.w/2) * TILE_SIZE, player.y - (comm.y + comm.h/2) * TILE_SIZE) < TILE_SIZE * 2;
 
-             if (!isStorageOpen && !isMarketOpen) {
+             if (!isAnyUIOpen) {
                  if (nearShip) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРНУТЬСЯ НА КОРАБЛЬ";
                  else if (interactables.tradePost.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОРГОВЛЯ";
                  else if (interactables.engineering.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ИНЖЕНЕРНЫЙ ТЕРМИНАЛ";
@@ -208,7 +218,8 @@ function update() {
         
         if (window.updateBlackHolePhysics) window.updateBlackHolePhysics(); 
 
-        if (!isWarping && !isDocked) { 
+        // Блокируем управление кораблем на карте, если открыто радио
+        if (!isWarping && !isDocked && (!window.isRadioOpen)) { 
             if (inputs.left) mapShip.angle -= mapShip.rotationSpeed;
             if (inputs.right) mapShip.angle += mapShip.rotationSpeed;
             if (inputs.up) { mapShip.vx += Math.cos(mapShip.angle) * mapShip.thrust; mapShip.vy += Math.sin(mapShip.angle) * mapShip.thrust; }
@@ -224,7 +235,6 @@ function update() {
 
         const inZone = window.isShipInDockingZone ? window.isShipInDockingZone() : false;
 
-        // --- ЛОГИКА ТЕКСТА СЕКТОРА ---
         let infoText = "";
         let infoClass = "sector-normal";
 
@@ -237,7 +247,7 @@ function update() {
                 infoText = "UNCHARTED STAR SYSTEM";
             } else if (currentSystemType === 'black_hole') {
                 infoText = "⚠ GRAVITATIONAL SINGULARITY DETECTED ⚠";
-                infoClass = "sector-danger"; // Включаем красный цвет и пульсацию
+                infoClass = "sector-danger";
             } else {
                 infoText = "DEEP SPACE";
             }
@@ -253,8 +263,8 @@ function update() {
             uiHint.innerHTML = "DOCKING AVAILABLE";
         } else {
             dockBtn.style.display = 'none';
-            // Применяем новые стили и текст вместо подсказок управления
             uiHint.className = infoClass;
+            // ИЗМЕНЕНИЕ: Убрана подсказка про COMMS [R]
             uiHint.innerHTML = infoText;
         }
     }
@@ -262,11 +272,9 @@ function update() {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // ИСПРАВЛЕНИЕ: Вызываем новую функцию для фона меню
     if (currentState === STATE_MENU) {
          if (window.drawSpaceBackground) drawSpaceBackground(false);
          else {
-             // Fallback если space.js еще не загрузился
              ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width, canvas.height);
          }
     }
@@ -293,6 +301,15 @@ window.addEventListener('keydown', (e) => {
     if (transition.active) return;
     if (currentState === STATE_MENU) return;
     
+    // --- ОБРАБОТКА БЛОКИРУЮЩИХ ОКОН ---
+    
+    // 1. Радио
+    if (typeof isRadioOpen !== 'undefined' && isRadioOpen) {
+        if (e.code === 'Escape' || e.code === 'KeyR') toggleRadio(false);
+        return; 
+    }
+
+    // 2. Склад
     if (isStorageOpen) {
         if (e.code === 'Escape') {
             if (holdingItemData) {
@@ -309,16 +326,19 @@ window.addEventListener('keydown', (e) => {
         return;
     }
 
+    // 3. Спектр
     if (isSpectrumOpen) {
         if (e.code === 'Escape' || e.code === 'KeyM') { toggleSpectrum(false); return; }
         return; 
     }
 
+    // 4. Рынок
     if (isMarketOpen) {
         if (e.code === 'Escape' || e.code === 'KeyE') { toggleMarket(false); return; }
         return; 
     }
 
+    // 5. Меню строительства (Escape закрывает его)
     if (e.code === 'Escape') {
         if (selectedBuildItem) { if (movingOriginalState) { installedModules.push(movingOriginalState); movingOriginalState = null; } clearCursor(); return; }
         
@@ -332,22 +352,56 @@ window.addEventListener('keydown', (e) => {
         }
     }
     
+    // --- ГЛОБАЛЬНЫЕ КЛАВИШИ ---
+
+    // Стыковка (только на карте)
     if (e.code === 'KeyF' && currentState === STATE_MAP && dockBtn.style.display === 'block') { handleDockingInteraction(); return; }
-    if (isBuildMenuOpen) { 
-        if (e.code === 'KeyR' && selectedBuildItem && selectedBuildItem !== 'basic') { if (selectedBuildItem === 'engine') return; buildRotation = buildRotation === 0 ? 1 : 0; }
-        return; 
+
+    // Клавиша R (Радио ИЛИ Поворот)
+    if (e.code === 'KeyR') {
+        // Приоритет 1: Вращение в режиме строительства
+        if (isBuildMenuOpen) { 
+            if (selectedBuildItem && selectedBuildItem !== 'basic' && selectedBuildItem !== 'engine') {
+                buildRotation = buildRotation === 0 ? 1 : 0; 
+            }
+            return;
+        }
+        
+        // Приоритет 2: Открытие Радио
+        if (typeof toggleRadio === 'function') {
+            // На карте - открываем всегда
+            if (currentState === STATE_MAP) {
+                toggleRadio(true);
+                return;
+            }
+            // В корабле - только если активен мостик
+            if (currentState === STATE_SHIP) {
+                if (interactables.bridge.active) {
+                    toggleRadio(true);
+                } else {
+                    // Подсказка об ошибке
+                    uiHint.innerHTML = "<span style='color:red'>ОШИБКА: НЕТ СВЯЗИ. ИСПОЛЬЗУЙТЕ ТЕРМИНАЛ МОСТИКА.</span>";
+                    setTimeout(() => { if(!isRadioOpen && !isBuildMenuOpen) uiHint.innerHTML = ""; }, 1500);
+                }
+                return;
+            }
+        }
     }
+
+    // --- УПРАВЛЕНИЕ И ВЗАИМОДЕЙСТВИЕ ---
 
     switch(e.code) {
         case 'KeyW': case 'ArrowUp': inputs.up = true; break;
         case 'KeyS': case 'ArrowDown': inputs.down = true; break;
         case 'KeyA': case 'ArrowLeft': inputs.left = true; break;
         case 'KeyD': case 'ArrowRight': inputs.right = true; break;
+        
         case 'KeyM': 
             if ((currentState === STATE_SHIP && interactables.bridge.active) || currentState === STATE_MAP) {
                 toggleSpectrum(true);
             }
             break;
+            
         case 'KeyE':
             if (currentState === STATE_SHIP) {
                 if (interactables.bridge.active) startTransition(STATE_MAP);
@@ -379,6 +433,8 @@ window.addEventListener('keyup', (e) => {
 initGame();
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 loop();
+
+// --- ОТРИСОВКА ---
 
 function drawHangar() {
     ctx.fillStyle = '#050505'; ctx.fillRect(player.x - canvas.width, player.y - canvas.height, canvas.width*2, canvas.height*2);

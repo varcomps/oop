@@ -1,10 +1,12 @@
-// spectrum.js - 3D PATHFINDING SCANNER
+
+/* spectrum.js - Исправлен черный экран после прыжка с открытым сканером */
+
 const sp3dCanvas = document.getElementById('sp3dCanvas');
 const sp3dCtx = sp3dCanvas.getContext('2d');
 const btnScanAction = document.getElementById('btnScanAction');
-const btnEngage3D = document.getElementById('btnEngage3D');
 
-// --- НАСТРОЙКИ 3D ---
+window.activeAutopilotRoute = null;
+
 const CLOUD_RADIUS = 280; 
 const STAR_COUNT = 250;
 const FOCAL_LENGTH = 400;
@@ -16,7 +18,6 @@ let targetRotation = { x: 0, y: 0 };
 let isDragging3D = false;
 let lastMouse = { x: 0, y: 0 };
 
-// --- СОСТОЯНИЕ ---
 let scan3DState = {
     active: false,
     radius: 0, 
@@ -67,14 +68,22 @@ class StarNode {
     }
 }
 
+// Функция сброса цели
+window.clear3DTarget = function() {
+    scan3DState.selectedNode = null;
+    scan3DState.route = [];
+    window.activeAutopilotRoute = null;
+};
+
+// Полный сброс спектра
 window.resetSpectrum = function() {
     stars3D = [];
+    window.activeAutopilotRoute = null; 
     scan3DState = { 
         active: false, radius: 0, maxRadius: 600, scanned: false, 
         selectedNode: null, playerNode: null, route: [], animTime: 0
     };
     btnScanAction.style.display = 'inline-block';
-    btnEngage3D.style.display = 'none';
 };
 
 function initSpectrum() {
@@ -113,9 +122,9 @@ function initSpectrum() {
     });
 
     btnScanAction.style.display = 'inline-block';
-    btnEngage3D.style.display = 'none';
 
     sp3dCanvas.onmousedown = (e) => { 
+        if (typeof isWarping !== 'undefined' && isWarping) return; // Блокируем управление при помехах
         isDragging3D = true; 
         lastMouse.x = e.clientX; 
         lastMouse.y = e.clientY; 
@@ -145,8 +154,87 @@ function toggleSpectrum(state) {
     }
 }
 
+// --- ОТРИСОВКА ПОМЕХ ---
+function drawWarpStatic() {
+    // 1. Темный фон с легким "шлейфом"
+    sp3dCtx.fillStyle = 'rgba(0, 5, 10, 0.4)';
+    sp3dCtx.fillRect(0, 0, sp3dCanvas.width, sp3dCanvas.height);
+
+    // 2. Горизонтальные линии (Scanlines)
+    for (let i = 0; i < 30; i++) {
+        const y = Math.random() * sp3dCanvas.height;
+        const h = Math.random() * 20 + 2;
+        const alpha = Math.random() * 0.3;
+        
+        // Чередуем цвета помех (циан, красный, белый)
+        const rand = Math.random();
+        if(rand > 0.6) sp3dCtx.fillStyle = `rgba(0, 229, 255, ${alpha})`; // Cyan
+        else if (rand > 0.3) sp3dCtx.fillStyle = `rgba(255, 23, 68, ${alpha})`; // Red
+        else sp3dCtx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // White
+
+        sp3dCtx.fillRect(0, y, sp3dCanvas.width, h);
+    }
+
+    // 3. Белый шум (Зерно)
+    for (let i = 0; i < 200; i++) {
+        const x = Math.random() * sp3dCanvas.width;
+        const y = Math.random() * sp3dCanvas.height;
+        const w = Math.random() * 4;
+        sp3dCtx.fillStyle = Math.random() > 0.5 ? '#fff' : '#000';
+        sp3dCtx.globalAlpha = Math.random() * 0.5;
+        sp3dCtx.fillRect(x, y, w, 2);
+    }
+    sp3dCtx.globalAlpha = 1.0;
+
+    // 4. Текст ошибки
+    if (Math.random() > 0.1) { // Легкое мерцание текста
+        sp3dCtx.save();
+        sp3dCtx.translate((Math.random()-0.5)*5, (Math.random()-0.5)*5); // Тряска текста
+        
+        sp3dCtx.font = "bold 40px Orbitron";
+        sp3dCtx.textAlign = "center";
+        
+        // Эффект хроматической аберрации для текста
+        sp3dCtx.fillStyle = "rgba(255, 0, 0, 0.5)";
+        sp3dCtx.fillText("SIGNAL LOST", sp3dCanvas.width/2 + 4, sp3dCanvas.height/2);
+        
+        sp3dCtx.fillStyle = "rgba(0, 255, 255, 0.5)";
+        sp3dCtx.fillText("SIGNAL LOST", sp3dCanvas.width/2 - 4, sp3dCanvas.height/2);
+        
+        sp3dCtx.fillStyle = "#fff";
+        sp3dCtx.fillText("SIGNAL LOST", sp3dCanvas.width/2, sp3dCanvas.height/2);
+        
+        sp3dCtx.font = "16px monospace";
+        sp3dCtx.fillStyle = "#ff5252";
+        sp3dCtx.fillText("INTERFERENCE DETECTED // HYPERSPACE CONDUIT", sp3dCanvas.width/2, sp3dCanvas.height/2 + 40);
+        
+        sp3dCtx.restore();
+    }
+    
+    // Скрываем кнопку сканирования во время помех
+    btnScanAction.style.display = 'none';
+}
+
 function updateSpectrum() {
     if (!isSpectrumOpen) return;
+    
+    // --- ПРОВЕРКА НА ВАРП ---
+    if (typeof isWarping !== 'undefined' && isWarping) {
+        drawWarpStatic();
+        return; 
+    }
+
+    // --- ИСПРАВЛЕНИЕ ЧЕРНОГО ЭКРАНА ---
+    // Если варп кончился, массив звезд пуст (после resetSpectrum), но окно открыто -> создаем звезды заново
+    if (stars3D.length === 0) {
+        initSpectrum();
+    }
+    // ----------------------------------
+
+    if (!scan3DState.scanned && btnScanAction.style.display === 'none') {
+        btnScanAction.style.display = 'inline-block';
+    }
+
     scan3DState.animTime += 0.05;
 
     rotation.x += (targetRotation.x - rotation.x) * 0.1;
@@ -218,8 +306,8 @@ function updateSpectrum() {
         
         if (scan3DState.selectedNode === star) {
             sp3dCtx.shadowBlur = 15; sp3dCtx.shadowColor = star.color; sp3dCtx.globalAlpha = 1;
-            sp3dCtx.strokeStyle = star.color; sp3dCtx.lineWidth = 1; sp3dCtx.stroke();
-            sp3dCtx.beginPath(); sp3dCtx.arc(star.px, star.py, 12*star.scale, 0, Math.PI*2); sp3dCtx.stroke();
+            sp3dCtx.strokeStyle = star.color; sp3dCtx.lineWidth = 2; sp3dCtx.stroke();
+            sp3dCtx.beginPath(); sp3dCtx.arc(star.px, star.py, 14*star.scale, 0, Math.PI*2); sp3dCtx.stroke();
         } else {
             sp3dCtx.shadowBlur = 0;
         }
@@ -341,65 +429,11 @@ function calculatePathTo(target) {
         }
         scan3DState.route.reverse();
         
-        // ОБНОВЛЕНИЕ СОСТОЯНИЯ КНОПКИ
-        updateEngageButtonState();
-        btnEngage3D.style.display = 'inline-block';
+        window.activeAutopilotRoute = {
+            targetType: target.type,
+            jumpsRequired: scan3DState.route.length - 1
+        };
     } else {
-        btnEngage3D.style.display = 'none';
+        window.activeAutopilotRoute = null;
     }
-}
-
-// НОВАЯ ФУНКЦИЯ ДЛЯ УПРАВЛЕНИЯ КНОПКОЙ
-function updateEngageButtonState() {
-    const jumps = scan3DState.route.length - 1;
-    const fuel = window.getFuelCount ? window.getFuelCount() : 0;
-    
-    // Сбрасываем стили
-    btnEngage3D.style.pointerEvents = 'auto';
-    btnEngage3D.style.opacity = '1';
-
-    if (isDocked) {
-        // ОШИБКА: ПРИСТЫКОВАН
-        btnEngage3D.innerHTML = "ОТСТЫКУЙТЕСЬ";
-        btnEngage3D.style.borderColor = "#ff1744";
-        btnEngage3D.style.color = "#ff1744";
-        btnEngage3D.style.boxShadow = "none";
-        btnEngage3D.style.cursor = "not-allowed";
-        // Блокируем в engage3DRoute, но визуально даем понять
-    } 
-    else if (fuel < jumps) {
-        // ОШИБКА: НЕТ ТОПЛИВА
-        btnEngage3D.innerHTML = `НЕТ ТОПЛИВА (${fuel}/${jumps})`;
-        btnEngage3D.style.borderColor = "#ff1744";
-        btnEngage3D.style.color = "#ff1744";
-        btnEngage3D.style.boxShadow = "none";
-        btnEngage3D.style.cursor = "not-allowed";
-    } 
-    else {
-        // ГОТОВО
-        btnEngage3D.innerHTML = `АВТОПИЛОТ (${jumps} ПР.)`;
-        btnEngage3D.style.borderColor = "#d500f9";
-        btnEngage3D.style.color = "#ea80fc";
-        btnEngage3D.style.cursor = "pointer";
-    }
-}
-
-function engage3DRoute() {
-    // 1. ПРОВЕРКА НА СТЫКОВКУ
-    if (isDocked) {
-        return; // Игнорируем нажатие
-    }
-
-    if (!scan3DState.selectedNode || scan3DState.route.length === 0) return;
-    
-    // 2. ПРОВЕРКА ТОПЛИВА
-    const jumps = scan3DState.route.length - 1;
-    const fuel = window.getFuelCount ? window.getFuelCount() : 0;
-    
-    if (fuel < jumps) {
-        return; // Игнорируем нажатие
-    }
-
-    toggleSpectrum(false);
-    startAutoJumpSequence(jumps, scan3DState.selectedNode.type);
 }

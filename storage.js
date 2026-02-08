@@ -6,8 +6,6 @@ const storageGhost = document.getElementById('storageGhost');
 const storageTitle = document.getElementById('storageTitle');
 const fuelValUI = document.getElementById('fuelVal');
 
-// Глобальные переменные для доступа из market.js
-// ИЗМЕНЕНИЕ: Добавлено 5 единиц топлива со старта
 window.placedStorageItems = [
     { type: 'fuel', x: 0, y: 0, w: 2, h: 1 },
     { type: 'fuel', x: 2, y: 0, w: 2, h: 1 },
@@ -20,7 +18,6 @@ window.holdingItemData = null;
 let isTradeMode = false;
 let isStorageOpen = false;
 
-// Инициализация основной сетки
 for(let i=0; i<100; i++) {
     const cell = document.createElement('div');
     cell.className = 'grid-cell';
@@ -32,7 +29,6 @@ gridContainer.onmouseleave = () => {
     if(storageGhost) storageGhost.style.display = 'none'; 
 };
 
-// Глобальный слушатель
 window.addEventListener('mousemove', (e) => {});
 
 function toggleStorage(state, tradeMode = false) {
@@ -65,7 +61,6 @@ function toggleStorage(state, tradeMode = false) {
     }
 }
 
-// Экспортируем функцию рендера главной сетки
 window.renderStorageGrid = function() {
     const items = gridContainer.querySelectorAll('.grid-item-visual');
     items.forEach(el => el.remove());
@@ -73,22 +68,26 @@ window.renderStorageGrid = function() {
     window.placedStorageItems.forEach(item => {
         const div = document.createElement('div');
         div.className = 'grid-item-visual';
-        
-        // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: Box Sizing ---
         div.style.boxSizing = 'border-box'; 
 
         if (item.type === 'fuel') {
             div.classList.add('fuel-style');
             div.innerHTML = '<div class="fuel-charge"></div><span class="fuel-label">F-CELL</span>';
         }
+        else if (item.type === 'fuel_premium') {
+            div.classList.add('fuel-style');
+            div.style.borderColor = '#ffd700'; 
+            div.style.boxShadow = 'inset 0 0 10px rgba(255, 215, 0, 0.3)';
+            // ИЗМЕНЕНИЕ: S-FUEL -> SUPER
+            div.innerHTML = '<div class="fuel-charge" style="background:#ffd700; box-shadow:0 0 10px #ffd700;"></div><span class="fuel-label" style="color:#ffd700;">SUPER</span>';
+        }
         else if (item.type === 'cargo') {
             div.classList.add('cargo-style');
             div.innerHTML = `<span class="cargo-text">${item.name ? item.name.substring(0,8) : 'CRATE'}</span>`;
         }
         
-        // Настройки сетки (как в CSS)
-        const step = 47; // 45px cell + 2px gap
-        const pad = 4;   // Соответствует padding: 4px в CSS
+        const step = 47; 
+        const pad = 4;   
         
         div.style.width = (item.w * step - 2) + 'px';
         div.style.height = (item.h * step - 2) + 'px';
@@ -104,17 +103,25 @@ function renderStorageList() {
     storageList.innerHTML = '';
     if (isTradeMode) {
         const fuelCost = 0.0001;
+        const premiumCost = 0.0005; 
+
         const btn = document.createElement('div');
         btn.className = 'shop-item-btn';
         btn.innerHTML = `<span>FUEL CELL (2x1)</span><span class="price-tag">${fuelCost} SC</span>`;
         btn.onclick = () => {
-            if (player.credits + 0.0000001 >= fuelCost) {
-                tryAutoBuy('fuel', 2, 1, fuelCost);
-            } else {
-                console.log("Not enough credits");
-            }
+            if (player.credits >= fuelCost) tryAutoBuy('fuel', 2, 1, fuelCost);
         };
         storageList.appendChild(btn);
+
+        const btnPrem = document.createElement('div');
+        btnPrem.className = 'shop-item-btn';
+        btnPrem.style.borderColor = '#ffd700';
+        // ИЗМЕНЕНИЕ: Название кнопки магазина уже было корректным, оставляем
+        btnPrem.innerHTML = `<span style="color:#ffd700">SUPER FUEL (2x1)</span><span class="price-tag">${premiumCost} SC</span>`;
+        btnPrem.onclick = () => {
+            if (player.credits >= premiumCost) tryAutoBuy('fuel_premium', 2, 1, premiumCost);
+        };
+        storageList.appendChild(btnPrem);
     }
 }
 
@@ -205,11 +212,10 @@ window.handleStorageGridHover = function(e, index, context = 'main') {
     
     activeGhost.style.display = 'block';
     
-    // --- ВАЖНОЕ ИСПРАВЛЕНИЕ ДЛЯ ПРИЗРАКА ---
     activeGhost.style.boxSizing = 'border-box';
     
     const stepSize = 47; 
-    const pad = 4; // Padding 4px
+    const pad = 4; 
     
     const ghostW = (window.holdingItemData.w * stepSize) - 2; 
     const ghostH = (window.holdingItemData.h * stepSize) - 2;
@@ -234,9 +240,30 @@ window.handleStorageGridHover = function(e, index, context = 'main') {
 }
 
 function getFuelCount() {
-    return window.placedStorageItems.filter(i => i.type === 'fuel').length;
+    return window.placedStorageItems.filter(i => i.type === 'fuel' || i.type === 'fuel_premium').length;
 }
 
+window.getPremiumFuelCount = function() {
+    return window.placedStorageItems.filter(i => i.type === 'fuel_premium').length;
+}
+
+window.consumeSpecificFuel = function(type) {
+    let targetType = (type === 'premium') ? 'fuel_premium' : 'fuel';
+    
+    let index = window.placedStorageItems.findIndex(i => i.type === targetType);
+    
+    if (index === -1 && type === 'normal') {
+        index = window.placedStorageItems.findIndex(i => i.type === 'fuel_premium');
+    }
+
+    if (index !== -1) {
+        window.placedStorageItems.splice(index, 1);
+        updateFuelUI();
+        window.renderStorageGrid();
+        return true;
+    }
+    return false;
+}
 function updateFuelUI() {
     if (fuelValUI) fuelValUI.innerText = getFuelCount();
 }
