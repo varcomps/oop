@@ -1,328 +1,852 @@
-/* radio.js - Система связи: Эфир, Личные чаты, Drag&Drop */
+/* radio.js - UPDATED: No Locations + Extreme Market Shifts */
 
-const radioUI = document.getElementById('radioUI');
+// ==========================================
+// 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И НАСТРОЙКИ
+// ==========================================
+
+const radioUI = document.getElementById('radioUI'); 
 const radioHeader = document.getElementById('radioHeader');
 const radioLog = document.getElementById('radioLog');
 
-// Стейт вкладок
 let currentRadioTab = 'general';
-let activeChatId = null;
-
+let activeChatId = null; 
 window.isRadioOpen = false;
 window.activeMarketRumor = null; 
+window.privateChats = []; 
 
-// --- ДАННЫЕ ЛИЧНЫХ СООБЩЕНИЙ ---
-// Структура: { id: 'sys', name: 'SYSTEM', unread: 0, messages: [] }
-window.privateChats = []; // Теперь пустой при старте
+// Хранилище слушателей Firebase
+let contactsRef = null;
+let requestsRef = null;
+let activeChatListeners = {}; 
 
-// --- СЦЕНАРИИ ОБЩЕГО ЭФИРА (Рынок) ---
-const SCENARIOS_BULLISH = [
-    [{ name: "ДАЛЬНОБОЙЩИК", color: "#fff176", text: "Слышал новости? На главном заводе в секторе авария." }, { name: "ДИСПЕТЧЕР", color: "#4fc3f7", text: "Подтверждаю. Производство встало. Запасов {ITEM} хватит на пару часов." }, { name: "ДАЛЬНОБОЙЩИК", color: "#fff176", text: "Значит, к вечеру цена взлетит до небес." }],
-    [{ name: "ПИРАТ", color: "#ff5252", text: "Мы перекрыли поставки {ITEM}." }, { name: "ТОРГОВЕЦ", color: "#ef9a9a", text: "Черт, дефицит уже начался!" }],
-    [{ name: "ШИФР-КАНАЛ", color: "#b39ddb", text: "...массовая скупка {ITEM}. Директива 7." }, { name: "АГЕНТ", color: "#9575cd", text: "Принято. Искусственный спрос поднимет котировки." }]
-];
-const SCENARIOS_BEARISH = [
-    [{ name: "ШАХТЕР", color: "#ffa726", text: "Нашли гигантскую жилу {ITEM}! Просто завались!" }, { name: "БАЗА", color: "#ffb74d", text: "Ты обвалишь рынок, идиот!" }],
-    [{ name: "ПОЛИЦИЯ", color: "#4fc3f7", text: "Конфискат {ITEM} выброшен на аукцион." }, { name: "АУКЦИОН", color: "#81d4fa", text: "Продаем по любой цене." }],
-    [{ name: "ТЕХНИК", color: "#a1887f", text: "{ITEM} устарел. Вышла новая модель." }, { name: "СКЛАД", color: "#d7ccc8", text: "Сливай запасы, пока они хоть что-то стоят." }]
-];
-const SCENARIOS_FLAVOR = [
-    [{ name: "НЕИЗВЕСТНЫЙ", color: "#9e9e9e", text: "...помогите... воздух конча..." }, { name: "СИСТЕМА", color: "#ff5252", text: "СИГНАЛ ПОТЕРЯН." }],
-    [{ name: "ПАТРУЛЬ", color: "#4fc3f7", text: "Борт 7-2-9, заглушить двигатели!" }, { name: "КОНТРАБАНДИСТ", color: "#e040fb", text: "Поймай меня, если сможешь!" }]
+// --- ГЕНЕРАТОР ПРОЦЕДУРНЫХ ДИАЛОГОВ (PVE) ---
+
+const PVE_ACTORS = {
+    TRADER: { color: "#ef9a9a", names: ["Торговец", "Фрейтер", "Дальнобой", "Караван-7"] },
+    PIRATE: { color: "#ff5252", names: ["Череп", "Рейдер", "Корсар", "Неизвестный борт"] },
+    POLICE: { color: "#4fc3f7", names: ["Патруль", "Секторальный контроль", "Инспектор", "Гвардия"] },
+    MINER:  { color: "#ffa726", names: ["Бурильщик", "Шахтер-Прайм", "Геолог", "Добытчик"] },
+    SYSTEM: { color: "#b39ddb", names: ["СИСТЕМА", "ИИ Станции", "Аварийный маяк"] },
+    TECH:   { color: "#a1887f", names: ["Механик", "Док-сервис", "Инженер"] }
+};
+
+const ACTIONS = ["сброс груза", "атаку", "сканирование", "стыковку", "ремонт", "добычу"];
+
+// Шаблоны диалогов (Массив объектов-сценариев)
+// УБРАНЫ упоминания секторов. ДОБАВЛЕНЫ экстремальные рыночные события.
+const PROCEDURAL_TEMPLATES = [
+    // Сценарий 1: Пиратское нападение (Без локации)
+    {
+        type: "combat",
+        steps: [
+            { role: "PIRATE", text: "Глуши движки! Мы видим твою сигнатуру." },
+            { role: "TRADER", text: "Mayday! Меня атакуют по текущим координатам! Требуется помощь!" },
+            { role: "PIRATE", text: "Сбрасывай {ITEM} или будешь уничтожен." },
+            { role: "POLICE", text: "Всем бортам в квадрате, зафиксирована агрессия. Высылаем перехватчики." },
+            { role: "PIRATE", text: "Черт, легавые! Уходим в гипер!" }
+        ]
+    },
+    // Сценарий 2: РЕЗКИЙ РОСТ (Bullish - Spike)
+    {
+        type: "bullish",
+        multiplier: 3.5, // Цена вырастет в 3.5 раза
+        steps: [
+            { role: "TRADER", text: "Парни, вы слышали новости? На главной станции дефицит." },
+            { role: "TRADER", text: "Они скупают {ITEM} по безумным ценам! Я серьезно!" },
+            { role: "MINER", text: "Подтверждаю. Производство встало. Готовы платить тройную цену." },
+            { role: "SYSTEM", text: "РЫНОК: Прогнозируется экстремальный РОСТ цены на: {ITEM}." }
+        ]
+    },
+    // Сценарий 3: ОБВАЛ ЦЕНЫ (Bearish - Crash)
+    {
+        type: "bearish",
+        multiplier: 0.2, // Цена упадет до 20%
+        steps: [
+            { role: "PIRATE", text: "Ха! Мы только что выпотрошили корпоративный конвой." },
+            { role: "PIRATE", text: "Сбрасываем тонны {ITEM} на черный рынок. Забирайте даром." },
+            { role: "TRADER", text: "О нет... Это обрушит биржу. Сливайте запасы, пока не поздно!" },
+            { role: "SYSTEM", text: "РЫНОК: Ожидается перенасыщение. ОБВАЛ цены на: {ITEM}." }
+        ]
+    },
+    // Сценарий 4: Полицейская проверка (Нейтральный)
+    {
+        type: "neutral",
+        steps: [
+            { role: "POLICE", text: "Неизвестный борт, заглушите двигатели для сканирования." },
+            { role: "TRADER", text: "Офицер, я пустой. Лечу транзитом через этот квадрат." },
+            { role: "SYSTEM", text: "...СКАНИРОВАНИЕ ЗАВЕРШЕНО..." },
+            { role: "POLICE", text: "Чисто. Можете продолжать движение. Конец связи." }
+        ]
+    },
+    // Сценарий 5: Техническая проблема (Флейвор)
+    {
+        type: "flavor",
+        steps: [
+            { role: "TRADER", text: "У меня отказ навигации! Кто-нибудь видит меня на радарах?" },
+            { role: "TECH", text: "Вижу вас. У вас утечка топлива. Не включайте варп-двигатель." },
+            { role: "TRADER", text: "Понял. Дрейфую к ближайшему доку." },
+            { role: "SYSTEM", text: "ВНИМАНИЕ: Опасность столкновения в локальном пространстве." }
+        ]
+    }
 ];
 
-// --- ИНИЦИАЛИЗАЦИЯ ---
-// Вызывается один раз при загрузке main.js (если нужно) или при первом открытии
-function initRadioDraggable() {
-    if (radioUI && radioHeader) {
-        makeDraggable(radioUI, radioHeader);
+function generateProceduralConversation(itemName, itemObj) {
+    const template = PROCEDURAL_TEMPLATES[Math.floor(Math.random() * PROCEDURAL_TEMPLATES.length)];
+    const item = itemName || "Груз";
+    
+    // ЛОГИКА РЫНКА
+    if (itemObj) {
+        if (template.type === 'bullish') {
+            // Устанавливаем слух на повышение
+            window.activeMarketRumor = { id: itemObj.id, multiplier: template.multiplier };
+            console.log(`[RADIO] Generated BULLISH rumor for ${item} (x${template.multiplier})`);
+        } 
+        else if (template.type === 'bearish') {
+            // Устанавливаем слух на понижение
+            window.activeMarketRumor = { id: itemObj.id, multiplier: template.multiplier };
+            console.log(`[RADIO] Generated BEARISH rumor for ${item} (x${template.multiplier})`);
+        }
+    }
+
+    return template.steps.map(step => {
+        const actorData = PVE_ACTORS[step.role];
+        const name = actorData.names[Math.floor(Math.random() * actorData.names.length)];
+        
+        // Больше нет {SECTOR}, заменяем только {ITEM}
+        let text = step.text.replace(/{ITEM}/g, item);
+        
+        return { name: name, color: actorData.color, text: text };
+    });
+}
+
+// ==========================================
+// 2. FIREBASE LOGIC (БЭКЕНД)
+// ==========================================
+
+function getChatId(uid1, uid2) {
+    if (!uid1 || !uid2) return null;
+    return uid1 < uid2 ? uid1 + '_' + uid2 : uid2 + '_' + uid1;
+}
+
+// 2.1 Отправка заявки
+window.saveContactToFirebase = function(targetUid, name) {
+    const user = firebase.auth().currentUser;
+    if (!user) return Promise.reject("No auth");
+    
+    const myNick = document.getElementById('nicknameDisplay') ? document.getElementById('nicknameDisplay').innerText : "Unknown";
+    const requestPromise = firebase.database().ref('users/' + targetUid + '/requests/' + user.uid).set({
+        name: myNick,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+    });
+
+    const myContactPromise = firebase.database().ref('users/' + user.uid + '/contacts/' + targetUid).set(name);
+
+    return Promise.all([myContactPromise, requestPromise])
+        .then(() => {
+            window.addToRadioLog("СИСТЕМА: Запрос частоты отправлен пилоту " + name, "#4fc3f7");
+        })
+        .catch(e => {
+            window.addToRadioLog("ОШИБКА: " + (e.code || e.message), "#ff1744");
+        });
+};
+
+window.acceptRequest = function(targetUid, name) {
+    const user = firebase.auth().currentUser;
+    if (!user) return;
+    firebase.database().ref('users/' + user.uid + '/contacts/' + targetUid).set(name);
+    firebase.database().ref('users/' + user.uid + '/requests/' + targetUid).remove();
+    window.addToRadioLog("СИСТЕМА: Канал связи с " + name + " установлен.", "#00e676");
+};
+
+window.removeContact = function(targetUid, isRequest) {
+    const user = firebase.auth().currentUser;
+    if (!user) return;
+    if (isRequest) {
+        firebase.database().ref('users/' + user.uid + '/requests/' + targetUid).remove();
+    } else {
+        if (confirm("Разорвать связь и удалить частоту?")) {
+            firebase.database().ref('users/' + user.uid + '/contacts/' + targetUid).remove()
+                .then(() => {
+                    if (activeChatId === targetUid) window.closeChat();
+                });
+        }
+    }
+};
+
+window.sendFirebaseMessage = function(targetUid, text) {
+    const user = firebase.auth().currentUser;
+    if (!user) return;
+    const chatId = getChatId(user.uid, targetUid);
+    const msgData = {
+        sender: user.uid,
+        text: text,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        read: false
+    };
+    firebase.database().ref('chats/' + chatId).push(msgData);
+};
+
+// 2.5 Слушатели
+function startRadioListeners(user) {
+    cleanupListeners();
+    console.log("[Comms] Online as:", user.uid);
+    
+    contactsRef = firebase.database().ref('users/' + user.uid + '/contacts');
+    contactsRef.on('value', (snapshot) => {
+        syncContactsList(user, snapshot.val() || {}, 'friend');
+    });
+
+    requestsRef = firebase.database().ref('users/' + user.uid + '/requests');
+    requestsRef.on('value', (snapshot) => {
+        const reqs = snapshot.val() || {};
+        let reqMap = {};
+        for(let uid in reqs) reqMap[uid] = reqs[uid].name || "Unknown";
+        syncContactsList(user, reqMap, 'pending');
+    });
+}
+
+function syncContactsList(user, data, status) {
+    window.privateChats = window.privateChats.filter(c => {
+        if (c.status === status && !data.hasOwnProperty(c.id)) return false;
+        return true;
+    });
+
+    for (let uid in data) {
+        let existing = window.privateChats.find(c => c.id === uid);
+        if (!existing) {
+            window.privateChats.push({
+                id: uid, 
+                name: data[uid], 
+                unread: 0, 
+                messages: [],
+                status: status
+            });
+            subscribeToMessagesForUser(user, uid);
+        } else {
+            if (existing.status !== status) existing.status = status;
+            existing.name = data[uid];
+        }
+    }
+    renderContactList();
+}
+
+function subscribeToMessagesForUser(user, targetUid) {
+    const chatId = getChatId(user.uid, targetUid);
+    if (activeChatListeners[chatId]) return;
+
+    const chatRef = firebase.database().ref('chats/' + chatId).limitToLast(50);
+    activeChatListeners[chatId] = chatRef;
+
+    chatRef.on('child_added', (snapshot) => {
+        const msg = snapshot.val();
+        if (!msg) return;
+
+        let chat = window.privateChats.find(c => c.id === targetUid);
+        if (!chat) return;
+
+        const isMe = (msg.sender === user.uid);
+        const type = isMe ? 'out' : 'in';
+        const date = new Date(msg.timestamp);
+        const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+        if (!isMe && !msg.read) {
+            if (window.isRadioOpen && currentRadioTab === 'personal' && activeChatId === targetUid) {
+                snapshot.ref.update({ read: true });
+                msg.read = true; 
+            }
+        }
+
+        const msgObj = { key: snapshot.key, sender: type, text: msg.text, time: timeStr, read: msg.read };
+        
+        if (!chat.messages.some(m => m.key === snapshot.key)) {
+            chat.messages.push(msgObj);
+            
+            if (window.isRadioOpen && currentRadioTab === 'personal') {
+                if (activeChatId === targetUid) {
+                    renderChat(targetUid);
+                } else {
+                    if (type === 'in' && !msg.read) chat.unread++;
+                    renderContactList();
+                }
+            } else {
+                if (type === 'in' && !msg.read) {
+                     chat.unread++;
+                     if(typeof uiHint !== 'undefined') {
+                        uiHint.innerHTML = `<span style="color:#00e676; text-shadow:0 0 5px #00e676">INCOMING TRANSMISSION: ${chat.name}</span>`;
+                     }
+                }
+            }
+        }
+    });
+
+    chatRef.on('child_changed', (snapshot) => {
+        const val = snapshot.val();
+        let chat = window.privateChats.find(c => c.id === targetUid);
+        if (chat) {
+            const m = chat.messages.find(msg => msg.key === snapshot.key);
+            if (m) {
+                m.read = val.read;
+                if (activeChatId === targetUid) renderChat(targetUid);
+            }
+        }
+    });
+}
+
+function cleanupListeners() {
+    if (contactsRef) contactsRef.off();
+    if (requestsRef) requestsRef.off();
+    for (let id in activeChatListeners) activeChatListeners[id].off();
+    activeChatListeners = {};
+    window.privateChats = [];
+}
+
+// ==========================================
+// 3. СТИЛИ (CSS)
+// ==========================================
+const radioStyles = `
+    #radioUI { 
+        width: 700px; height: 550px; 
+        display: none; flex-direction: column; 
+        background: rgba(10, 15, 20, 0.95); 
+        border: 1px solid #00e5ff; 
+        box-shadow: 0 0 20px rgba(0, 229, 255, 0.2), inset 0 0 50px rgba(0,0,0,0.8);
+        z-index: 150; 
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        backdrop-filter: blur(5px);
+    }
+    #radioUI.manual-pos { transform: none !important; margin: 0; }
+
+    .radio-header { 
+        padding: 12px; background: rgba(0, 229, 255, 0.1); 
+        border-bottom: 1px solid #00e5ff; 
+        font-family: 'Orbitron', sans-serif; font-size: 14px; color: #00e5ff; letter-spacing: 1px;
+        display: flex; justify-content: space-between; cursor: grab; user-select: none;
+        text-shadow: 0 0 5px #00e5ff;
+    }
+    .close-btn { cursor: pointer; font-size: 12px; opacity: 0.7; transition: 0.3s; }
+    .close-btn:hover { color: #ff5252; opacity: 1; text-shadow: 0 0 8px #ff5252; }
+
+    .radio-tabs { display: flex; background: #050505; border-bottom: 1px solid #333; }
+    .radio-tab-btn { 
+        flex: 1; padding: 10px; background: transparent; border: none; 
+        color: #555; font-family: 'Orbitron'; cursor: pointer; transition: 0.3s;
+        border-bottom: 2px solid transparent;
+    }
+    .radio-tab-btn:hover { color: #aaa; background: rgba(255,255,255,0.02); }
+    .radio-tab-btn.active { color: #00e5ff; border-bottom: 2px solid #00e5ff; background: rgba(0, 229, 255, 0.05); text-shadow: 0 0 5px rgba(0,229,255,0.5); }
+
+    .radio-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
+    /* Scanlines effect */
+    .radio-body::after {
+        content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+        z-index: 2; background-size: 100% 2px, 3px 100%; pointer-events: none; opacity: 0.3;
+    }
+
+    .radio-view { display: none; flex-direction: column; flex: 1; height: 100%; z-index: 1; }
+    .radio-view.active { display: flex; }
+
+    /* Общий эфир */
+    .radio-log-container { 
+        flex: 1; background: #000; border: 1px solid #333; margin: 10px; padding: 10px; 
+        font-family: 'Share Tech Mono', monospace; font-size: 12px; overflow-y: auto; color: #ccc; 
+        box-shadow: inset 0 0 10px #000;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: #333; }
+    ::-webkit-scrollbar-thumb:hover { background: #00e5ff; }
+
+    .radio-controls { height: 50px; display: flex; justify-content: center; align-items: center; border-top: 1px solid #333; background: #0b0f14; gap: 10px; }
+    .btn-sos { 
+        background: rgba(255, 23, 68, 0.1); border: 1px solid #ff1744; color: #ff1744; 
+        padding: 8px 25px; font-family: 'Orbitron'; font-size: 12px; cursor: pointer; 
+        transition: 0.2s; letter-spacing: 1px;
+    }
+    .btn-sos:hover { background: #ff1744; color: #fff; box-shadow: 0 0 15px #ff1744; }
+
+    /* ЛИЧНЫЕ СООБЩЕНИЯ */
+    .personal-split { display: flex; flex: 1; height: 100%; overflow: hidden; }
+    
+    .radio-sidebar { width: 220px; border-right: 1px solid #333; display: flex; flex-direction: column; background: #080a0c; }
+    .add-contact-row { display: flex; padding: 8px; gap: 5px; border-bottom: 1px solid #333; background: #0f1215; }
+    .contact-input { flex: 1; background: #000; border: 1px solid #444; color: #fff; font-family: 'Share Tech Mono'; padding: 5px; font-size: 11px; outline: none; }
+    .contact-input:focus { border-color: #00e5ff; }
+    .btn-plus { width: 25px; background: #222; border: 1px solid #444; color: #00e5ff; cursor: pointer; }
+    .btn-plus:hover { background: #00e5ff; color: #000; }
+
+    .contact-list { flex: 1; overflow-y: auto; padding: 0; }
+    
+    .contact-item { 
+        padding: 10px; border-bottom: 1px solid #222; cursor: pointer; 
+        font-family: 'Orbitron'; font-size: 11px; color: #777; transition:0.2s; 
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .contact-item:hover { background: rgba(0, 229, 255, 0.1); color: #fff; }
+    .contact-item.active { background: rgba(0, 229, 255, 0.2); color: #fff; border-left: 3px solid #00e5ff; }
+    .contact-item.pending { border-left: 3px solid #d500f9; background: rgba(213, 0, 249, 0.1); }
+    
+    .btn-del-contact {
+        width: 18px; height: 18px; border-radius: 2px;
+        display: flex; align-items: center; justify-content: center;
+        color: #555; border: 1px solid #333;
+        margin-left: 5px; font-weight: bold; font-size: 12px;
+        transition: 0.2s;
+    }
+    .btn-del-contact:hover { color: #ff5252; border-color: #ff5252; background: rgba(255,0,0,0.2); }
+
+    .req-badge { color: #d500f9; font-size: 9px; margin-left: 5px; animation: blink 1s infinite; }
+
+    /* ПАНЕЛЬ ЧАТА */
+    .radio-main { flex: 1; display: flex; flex-direction: column; background: #0b0f14; }
+    .chat-header-bar { 
+        padding: 8px 15px; background: rgba(0,0,0,0.5); border-bottom: 1px solid #333; 
+        font-size: 12px; color: #00e5ff; font-family: 'Orbitron'; display: flex; justify-content: space-between; align-items: center;
+    }
+    
+    .chat-console { 
+        flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; 
+        font-family: 'Roboto Condensed', sans-serif; font-size: 13px; color: #ccc;
+    }
+
+    .msg-wrapper { display: flex; width: 100%; margin-bottom: 4px; }
+    .msg-wrapper.in { justify-content: flex-start; }
+    .msg-wrapper.out { justify-content: flex-end; }
+
+    .msg-bubble {
+        max-width: 75%;
+        padding: 10px 14px;
+        border-radius: 2px;
+        position: relative;
+        line-height: 1.4;
+        font-size: 13px;
+    }
+
+    .msg-wrapper.in .msg-bubble { background: #1c2329; border-left: 2px solid #546e7a; color: #cfd8dc; }
+    .msg-wrapper.out .msg-bubble { background: #003d33; border-right: 2px solid #00e676; color: #e0f2f1; }
+
+    .msg-meta {
+        display: flex; justify-content: flex-end; align-items: center;
+        gap: 6px; margin-top: 5px; font-size: 10px; opacity: 0.6; font-family: 'Share Tech Mono';
+    }
+
+    .read-status.read { color: #00e5ff; text-shadow: 0 0 3px #00e5ff; } 
+    .read-status.unread { color: #555; }   
+
+    .chat-input-bar { padding: 10px; border-top: 1px solid #333; display: flex; gap: 8px; background: #0f1215; }
+    .msg-input { 
+        flex: 1; background: #050505; border: 1px solid #333; color: #00e5ff; 
+        padding: 10px; font-family: 'Share Tech Mono'; font-size: 12px; outline: none; 
+    }
+    .msg-input:focus { border-color: #00e5ff; box-shadow: 0 0 5px rgba(0,229,255,0.2); }
+    .btn-send { 
+        background: #1a2327; border: 1px solid #00e5ff; color: #00e5ff; 
+        padding: 0 20px; cursor: pointer; font-family: 'Orbitron'; font-size: 11px; 
+        transition: 0.2s;
+    }
+    .btn-send:hover { background: #00e5ff; color: #000; box-shadow: 0 0 10px #00e5ff; }
+    
+    .input-error { animation: blinkError 0.4s ease-in-out; border-color: #ff1744 !important; }
+    @keyframes blinkError { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+`;
+
+function injectRadioStyles() {
+    const styleSheet = document.createElement("style");
+    styleSheet.innerText = radioStyles;
+    document.head.appendChild(styleSheet);
+}
+
+// ==========================================
+// 4. UI ИНИЦИАЛИЗАЦИЯ И PERSISTENCE (ЛОГ)
+// ==========================================
+
+function initRadioInterface() {
+    injectRadioStyles();
+    const old = document.getElementById('radioUI');
+    if (old) old.remove();
+
+    const html = `
+    <div id="radioUI">
+        <div class="radio-header" id="radioHeader">
+            <span>QUANTUM LINK SYSTEM</span>
+            <span class="close-btn" onclick="toggleRadio(false)">[TERMINATE]</span>
+        </div>
+        <div class="radio-tabs">
+            <button class="radio-tab-btn active" id="tab-general" onclick="switchRadioTab('general')">PUBLIC ETHER</button>
+            <button class="radio-tab-btn" id="tab-personal" onclick="switchRadioTab('personal')">ENCRYPTED</button>
+        </div>
+        <div class="radio-body"> 
+            <div id="view-general" class="radio-view active">
+                <div class="radio-log-container" id="radioLog"></div>
+                <div class="radio-controls">
+                    <button class="btn-sos" onclick="requestDistressCall()">BROADCAST SOS (0.001 SC)</button>
+                </div>
+            </div>
+            <div id="view-personal" class="radio-view">
+                <div class="personal-split">
+                    <div class="radio-sidebar">
+                        <div class="add-contact-row">
+                            <input type="text" id="addContactInput" class="contact-input" placeholder="Frequency ID (Nick)...">
+                            <button class="btn-plus" onclick="confirmNewChat()">+</button>
+                        </div>
+                        <div id="personal-contacts" class="contact-list"></div>
+                    </div>
+                    <div class="radio-main">
+                        <div class="chat-header-bar" id="chat-header-bar">
+                            <span id="chat-contact-name">NO CONNECTION</span>
+                        </div>
+                        <div id="chat-history" class="chat-console">
+                            <div style="color:#444; text-align:center; margin-top:50px; font-family:'Orbitron'">AWAITING CONNECTION...</div>
+                        </div>
+                        <div class="chat-input-bar">
+                            <input type="text" id="chatInput" class="msg-input" placeholder="Transmission data...">
+                            <button class="btn-send" onclick="sendPrivateMessage()">SEND</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    
+    document.getElementById('addContactInput').addEventListener('keydown', (e) => { e.stopPropagation(); if(e.key === 'Enter') confirmNewChat(); });
+    document.getElementById('chatInput').addEventListener('keydown', (e) => { e.stopPropagation(); if(e.key === 'Enter') sendPrivateMessage(); });
+
+    makeDraggable(document.getElementById('radioUI'), document.getElementById('radioHeader'));
+    
+    loadGeneralLog();
+}
+
+// Функции сохранения/загрузки лога
+function saveGeneralLog() {
+    const log = document.getElementById('radioLog');
+    if (!log) return;
+    const content = log.innerHTML;
+    if (content.length > 50000) {
+        localStorage.setItem('pve_radio_log', content.slice(-50000)); 
+    } else {
+        localStorage.setItem('pve_radio_log', content);
     }
 }
-// Вызовем сразу, чтобы инициализировать обработчики
-setTimeout(initRadioDraggable, 100);
 
+function loadGeneralLog() {
+    const saved = localStorage.getItem('pve_radio_log');
+    const log = document.getElementById('radioLog');
+    if (saved && log) {
+        log.innerHTML = saved;
+        log.scrollTop = log.scrollHeight;
+    }
+}
 
-// --- ФУНКЦИИ УПРАВЛЕНИЯ UI ---
+initRadioInterface();
+
+// ==========================================
+// 5. ФУНКЦИИ ИНТЕРФЕЙСА
+// ==========================================
 
 window.toggleRadio = function(state) {
     if (typeof transition !== 'undefined' && transition.active) return;
     window.isRadioOpen = state;
-    
-    if (radioUI) {
-        radioUI.style.display = state ? 'flex' : 'none';
-        
+    const ui = document.getElementById('radioUI');
+    if (ui) {
+        ui.style.display = state ? 'flex' : 'none';
         if (state) {
-            if (typeof inputs !== 'undefined') {
-                inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
+            if (typeof inputs !== 'undefined') { inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false; }
+            if (currentRadioTab === 'personal') {
+                renderContactList();
+                if (activeChatId) {
+                    const h = document.getElementById('chat-history');
+                    if(h) h.scrollTop = h.scrollHeight;
+                }
+            } else {
+                const log = document.getElementById('radioLog');
+                if(log) log.scrollTop = log.scrollHeight;
             }
-            // Обновляем список контактов при открытии
-            if (currentRadioTab === 'personal') renderContactList();
-            
-            // Скролл лога вниз
-            if(radioLog) radioLog.scrollTop = radioLog.scrollHeight;
         }
     }
-}
+};
 
-window.switchRadioTab = function(tabName) {
-    currentRadioTab = tabName;
-    
-    // UI кнопок
-    document.querySelectorAll('.radio-tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(`tab-${tabName}`).classList.add('active');
-    
-    // UI контента
-    document.querySelectorAll('.radio-view').forEach(view => view.classList.remove('active'));
-    document.getElementById(`view-${tabName}`).classList.add('active');
+window.switchRadioTab = function(tab) {
+    currentRadioTab = tab;
+    document.querySelectorAll('.radio-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.radio-view').forEach(v => v.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.getElementById(`view-${tab}`).classList.add('active');
+    if (tab === 'personal') renderContactList();
+};
 
-    if (tabName === 'personal') {
-        renderContactList();
-        // Если чат был открыт, обновляем его, иначе показываем список
-        if (activeChatId) {
-            document.getElementById('personal-contacts').style.display = 'none';
-            document.getElementById('personal-chat').style.display = 'flex';
-        } else {
-            document.getElementById('personal-contacts').style.display = 'flex';
-            document.getElementById('personal-chat').style.display = 'none';
+window.confirmNewChat = async function() {
+    const input = document.getElementById('addContactInput');
+    const nick = input.value ? input.value.trim() : "";
+    if (!nick) return;
+
+    const myNick = document.getElementById('nicknameDisplay') ? document.getElementById('nicknameDisplay').innerText : "PILOT";
+    if (nick === myNick) return;
+
+    if (window.findUserByNickname) {
+        input.disabled = true;
+        try {
+            const targetUid = await window.findUserByNickname(nick);
+            if (targetUid) {
+                await window.saveContactToFirebase(targetUid, nick);
+                input.value = ''; input.blur(); 
+            } else {
+                triggerInputError(input);
+            }
+        } catch (e) {
+            triggerInputError(input);
+        } finally {
+            input.disabled = false; input.focus();
         }
     }
+};
+
+function triggerInputError(el) {
+    el.classList.add('input-error');
+    setTimeout(() => el.classList.remove('input-error'), 400);
 }
 
-// --- ЛОГИКА ЛИЧНЫХ СООБЩЕНИЙ ---
-
-// API для получения сообщения от "игры"
-window.receivePrivateMessage = function(chatId, chatName, text) {
-    let chat = window.privateChats.find(c => c.id === chatId);
-    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    
-    if (!chat) {
-        chat = { id: chatId, name: chatName, unread: 0, messages: [] };
-        window.privateChats.unshift(chat); // Добавляем в начало
-    }
-    
-    chat.messages.push({ sender: 'in', text: text, time: time });
-    
-    // Если мы НЕ в этом чате прямо сейчас - увеличиваем счетчик
-    if (!window.isRadioOpen || currentRadioTab !== 'personal' || activeChatId !== chatId) {
-        chat.unread++;
-        
-        // Визуальная подсказка в HUD
-        if(typeof uiHint !== 'undefined') {
-            const oldHint = uiHint.innerHTML;
-            uiHint.innerHTML = `<span style="color:#00e676">СООБЩЕНИЕ ОТ: ${chatName}</span>`;
-            setTimeout(() => { if(uiHint.innerHTML.includes("СООБЩЕНИЕ")) uiHint.innerHTML = oldHint; }, 3000);
-        }
-    } else {
-        // Если чат открыт - сразу рендерим
-        renderChat(chatId);
-    }
-    
-    // Если открыт список контактов - обновляем
-    if (window.isRadioOpen && currentRadioTab === 'personal' && !activeChatId) {
-        renderContactList();
-    }
-}
-
+// 5.1 Рендер списка контактов
 function renderContactList() {
     const container = document.getElementById('personal-contacts');
     container.innerHTML = '';
     
     if (window.privateChats.length === 0) {
-        container.innerHTML = '<div style="padding:20px; text-align:center; color:#444; font-size:12px;">НЕТ ДИАЛОГОВ</div>';
+        container.innerHTML = '<div style="padding:20px;text-align:center;color:#333;font-size:10px;">NO FREQUENCIES</div>';
         return;
     }
+    
+    window.privateChats.sort((a, b) => {
+        if (a.status === 'pending') return -1;
+        if (b.status === 'pending') return 1;
+        return 0; 
+    });
 
     window.privateChats.forEach(chat => {
         const item = document.createElement('div');
         item.className = 'contact-item';
-        if (chat.unread > 0) item.classList.add('has-unread');
         
-        const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length-1].text : '';
-        const preview = lastMsg.length > 30 ? lastMsg.substring(0, 30) + '...' : lastMsg;
+        const infoDiv = document.createElement('div');
+        infoDiv.style.flex = "1";
         
-        item.innerHTML = `
-            <div>
-                <div class="contact-name">${chat.name}</div>
-                <div style="opacity:0.6; margin-top:2px;">${preview}</div>
-            </div>
-            ${chat.unread > 0 ? `<div class="unread-badge">${chat.unread}</div>` : ''}
-        `;
-        
-        item.onclick = () => openChat(chat.id);
+        if (chat.status === 'pending') {
+            item.classList.add('pending');
+            infoDiv.innerHTML = `<span>${chat.name}</span><span class="req-badge">REQ</span>`;
+            item.onclick = () => window.acceptRequest(chat.id, chat.name);
+        } else {
+            if (chat.id === activeChatId) item.classList.add('active');
+            
+            const badge = chat.unread > 0 ? `<span style="color:#00e676;font-weight:bold;margin-left:5px;">[${chat.unread}]</span>` : '';
+            infoDiv.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;">${chat.name}</span>${badge}`;
+            
+            item.onclick = () => openChat(chat.id);
+        }
+
+        const delBtn = document.createElement('div');
+        delBtn.className = 'btn-del-contact';
+        delBtn.innerText = '×';
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.removeContact(chat.id, chat.status === 'pending');
+        };
+
+        item.appendChild(infoDiv);
+        item.appendChild(delBtn);
         container.appendChild(item);
     });
 }
 
 function openChat(chatId) {
     activeChatId = chatId;
-    
-    // Сбрасываем непрочитанные
     const chat = window.privateChats.find(c => c.id === chatId);
-    if (chat) chat.unread = 0;
+    const headerName = document.getElementById('chat-contact-name');
+    if(headerName && chat) headerName.innerText = "LINKED: " + chat.name.toUpperCase();
+
+    if (chat) {
+        chat.unread = 0; 
+        const user = firebase.auth().currentUser;
+        if (user) {
+            const chatRef = firebase.database().ref('chats/' + getChatId(user.uid, chatId));
+            chat.messages.forEach(m => {
+                if (m.sender === 'in' && !m.read) {
+                    chatRef.child(m.key).update({read: true});
+                    m.read = true;
+                }
+            });
+        }
+    }
     
-    document.getElementById('personal-contacts').style.display = 'none';
-    const chatView = document.getElementById('personal-chat');
-    chatView.style.display = 'flex';
-    
-    document.getElementById('chat-contact-name').innerText = chat ? chat.name : 'UNKNOWN';
-    
+    renderContactList(); 
     renderChat(chatId);
 }
 
 window.closeChat = function() {
     activeChatId = null;
-    document.getElementById('personal-chat').style.display = 'none';
-    document.getElementById('personal-contacts').style.display = 'flex';
-    renderContactList(); // Обновить счетчики (сбросить badge)
+    document.getElementById('chat-contact-name').innerText = "NO CONNECTION";
+    document.getElementById('chat-history').innerHTML = '<div style="color:#444; text-align:center; margin-top:50px; font-family:\'Orbitron\'">AWAITING CONNECTION...</div>';
+    renderContactList();
 }
 
 function renderChat(chatId) {
-    const historyContainer = document.getElementById('chat-history');
-    historyContainer.innerHTML = '';
-    
+    const history = document.getElementById('chat-history');
+    history.innerHTML = '';
     const chat = window.privateChats.find(c => c.id === chatId);
     if (!chat) return;
     
     chat.messages.forEach(msg => {
-        const div = document.createElement('div');
-        div.className = `chat-msg ${msg.sender === 'in' ? 'incoming' : 'outgoing'}`;
-        div.innerHTML = `
-            <span class="chat-msg-time">${msg.time}</span>
-            ${msg.text}
+        const wrapper = document.createElement('div');
+        wrapper.className = `msg-wrapper ${msg.sender}`;
+        
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        
+        let ticks = '';
+        if (msg.sender === 'out') {
+            const statusClass = msg.read ? 'read' : 'unread';
+            const tickIcon = msg.read ? '///' : '/';
+            ticks = `<span class="read-status ${statusClass}">${tickIcon}</span>`;
+        }
+
+        bubble.innerHTML = `
+            <div>${msg.text}</div>
+            <div class="msg-meta">
+                <span>${msg.time}</span>
+                ${ticks}
+            </div>
         `;
-        historyContainer.appendChild(div);
+        
+        wrapper.appendChild(bubble);
+        history.appendChild(wrapper);
     });
     
-    // Скролл вниз
-    historyContainer.scrollTop = historyContainer.scrollHeight;
+    history.scrollTop = history.scrollHeight;
 }
 
-// --- ЛОГИКА ОБЩЕГО ЭФИРА (СТАРАЯ) ---
+window.sendPrivateMessage = function() {
+    if (!activeChatId) return;
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    window.sendFirebaseMessage(activeChatId, text);
+};
+
+
+// ==========================================
+// 6. ЛОГИКА ОБЩЕГО ЭФИРА (PVE) - ОБНОВЛЕННАЯ
+// ==========================================
 
 window.addToRadioLog = function(msg, color = "#ccc") {
-    if (!radioLog) return;
+    const log = document.getElementById('radioLog');
+    if (!log) return;
     const line = document.createElement('div');
     line.style.color = color;
-    line.style.marginBottom = "4px";
+    line.style.marginBottom = "6px";
     line.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
-    line.style.paddingBottom = "2px";
+    line.style.paddingBottom = "4px";
     line.style.wordWrap = "break-word";
     const time = new Date().toLocaleTimeString('ru-RU', { hour12: false });
-    line.innerHTML = `<span style="opacity:0.5; font-size:10px; margin-right:5px;">[${time}]</span>${msg}`;
-    radioLog.appendChild(line);
-    radioLog.scrollTop = radioLog.scrollHeight;
-}
+    line.innerHTML = `<span style="opacity:0.5;font-size:10px;margin-right:8px;color:#00e5ff;">[${time}]</span>${msg}`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+    
+    saveGeneralLog(); 
+};
 
 window.requestDistressCall = function() {
     const cost = 0.001;
-    if (player.credits < cost) {
-        window.addToRadioLog("ОШИБКА: Недостаточно средств для сигнала SOS.", "#ff1744");
-        return;
-    }
-    player.credits -= cost;
+    if (typeof player !== 'undefined' && player.credits < cost) return window.addToRadioLog("SYSTEM: INSUFFICIENT CREDITS", "#ff1744");
+    if (typeof player !== 'undefined') player.credits -= cost;
     if (window.updateCurrencyUI) window.updateCurrencyUI();
-    window.addToRadioLog("ИСХОДЯЩИЙ: Mayday! Запрашиваю экстренную помощь.", "#ff5252");
+    
+    window.addToRadioLog("YOU: MAYDAY! MAYDAY! CURRENT COORDS", "#ff5252");
     
     setTimeout(() => {
-        window.addToRadioLog("ВХОДЯЩИЙ: Спасательная служба. Сбрасываем топливный пакет.", "#00e676");
-        if (window.tryAutoBuy) {
-            window.tryAutoBuy('fuel', 2, 1, 0); 
-            window.tryAutoBuy('fuel', 2, 1, 0);
-        }
+        window.addToRadioLog("RESCUE BOT: Coordinates received. Dropping fuel packs.", "#00e676");
+        if (window.tryAutoBuy) { window.tryAutoBuy('fuel', 2, 1, 0); }
         if (window.updateBuildUI) window.updateBuildUI();
-        window.addToRadioLog("СИСТЕМА: Получено: 2x Топливо.", "#ffd700");
-    }, 1500);
-}
+    }, 2000);
+};
 
-function playRadioScenario(scenario, itemName) {
+// Функция проигрывания диалога
+function playProceduralDialogue(conversation) {
     let delay = 0;
-    scenario.forEach((line, index) => {
+    conversation.forEach((line) => {
         setTimeout(() => {
-            let text = line.text;
-            if (itemName) text = text.replace(/{ITEM}/g, itemName);
-            window.addToRadioLog(`${line.name}: "${text}"`, line.color);
+            window.addToRadioLog(`${line.name}: "${line.text}"`, line.color);
         }, delay);
-        delay += 1500 + Math.random() * 1000;
+        delay += 1000 + (line.text.length * 40); 
     });
 }
 
 window.checkIncomingTransmission = function() {
     let items = null;
+    let targetItemName = "Энергоблоки";
+    let targetItemObj = null;
+
     if (typeof window.COMMODITY_DB !== 'undefined') items = window.COMMODITY_DB;
     else if (typeof window.marketState !== 'undefined') items = window.marketState.items;
 
-    if (!items || items.length === 0) return;
-
-    if (Math.random() < 0.5) {
-        const scenario = SCENARIOS_FLAVOR[Math.floor(Math.random() * SCENARIOS_FLAVOR.length)];
-        playRadioScenario(scenario, null);
-        return;
+    if (items && items.length > 0) {
+        targetItemObj = items[Math.floor(Math.random() * items.length)];
+        targetItemName = targetItemObj.name;
     }
 
-    const targetItem = items[Math.floor(Math.random() * items.length)];
-    const isBullish = Math.random() > 0.5;
-    
-    window.activeMarketRumor = {
-        id: targetItem.id,
-        multiplier: isBullish ? 3.0 : 0.2, 
-        name: targetItem.name
-    };
-
-    let scenarioList = isBullish ? SCENARIOS_BULLISH : SCENARIOS_BEARISH;
-    const scenario = scenarioList[Math.floor(Math.random() * scenarioList.length)];
-    playRadioScenario(scenario, targetItem.name);
+    const conversation = generateProceduralConversation(targetItemName, targetItemObj);
+    playProceduralDialogue(conversation);
 }
 
-// --- УТИЛИТА DRAG & DROP ---
+
+// ==========================================
+// 7. DRAG & DROP UTILITY
+// ==========================================
 
 function makeDraggable(elmnt, handle) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    
-    if (handle) {
-        handle.onmousedown = dragMouseDown;
-    } else {
-        elmnt.onmousedown = dragMouseDown;
-    }
+    if (handle) handle.onmousedown = dragMouseDown;
+    else elmnt.onmousedown = dragMouseDown;
 
     function dragMouseDown(e) {
         e = e || window.event;
         e.preventDefault();
-        
-        // При первом клике снимаем CSS центрирование (transform: translate)
-        // и заменяем его на конкретные пиксели top/left
         const style = window.getComputedStyle(elmnt);
         if (style.transform !== 'none') {
             const rect = elmnt.getBoundingClientRect();
             elmnt.style.left = rect.left + 'px';
             elmnt.style.top = rect.top + 'px';
-            elmnt.classList.add('manual-pos'); // Класс, отключающий transform в CSS
+            elmnt.classList.add('manual-pos'); 
         }
-        
-        // Получаем позицию курсора
         pos3 = e.clientX;
         pos4 = e.clientY;
-        
         document.onmouseup = closeDragElement;
         document.onmousemove = elementDrag;
     }
-
     function elementDrag(e) {
         e = e || window.event;
         e.preventDefault();
-        
-        // Вычисляем смещение
         pos1 = pos3 - e.clientX;
         pos2 = pos4 - e.clientY;
         pos3 = e.clientX;
         pos4 = e.clientY;
-        
-        // Устанавливаем новую позицию
         elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
         elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
     }
-
     function closeDragElement() {
         document.onmouseup = null;
         document.onmousemove = null;
     }
+}
+
+// ==========================================
+// 8. ЗАПУСК
+// ==========================================
+if (typeof firebase !== 'undefined') {
+    firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+            startRadioListeners(user);
+        } else {
+            cleanupListeners();
+        }
+    });
 }

@@ -1,3 +1,5 @@
+/* market.js */
+
 const marketUI = document.getElementById('marketUI');
 const marketListContainer = document.getElementById('marketList');
 const marketGraphCanvas = document.getElementById('marketGraphCanvas');
@@ -83,6 +85,7 @@ function initMarket() {
         };
     }
 
+    // Генерация с нуля (если не загрузили сохранение)
     marketState.items = COMMODITY_DB.map(c => {
         let history = [];
         let current = c.base;
@@ -109,44 +112,25 @@ function initMarket() {
     }
 }
 
-// В market.js
-
 function updateGlobalPrices(freezePrices = false) {
-    // 1. Если это ПРЕМИУМ прыжок, цены НЕ меняются
     if (freezePrices) {
-        // Мы не меняем цены, но мы должны удалить слух, если игрок его не использовал?
-        // Нет, пусть слух висит, пока не произойдет ОБЫЧНЫЙ прыжок.
-        // Это позволяет "довезти" слух до нужного места используя супер-топливо.
         console.log("Market prices frozen by Super Fuel.");
         return; 
     }
 
-    // 2. Обычное обновление цен
     marketState.items.forEach(item => {
         let change = (Math.random() - 0.5) * item.step * 2;
         
-        // --- ЛОГИКА СЛУХОВ ---
         if (window.activeMarketRumor && window.activeMarketRumor.id === item.id) {
-            // Применяем инсайд
             const mult = window.activeMarketRumor.multiplier;
-            console.log(`Rumor realized for ${item.name}: x${mult}`);
-            
-            // Если множитель > 1 (рост), прибавляем много. Если < 1 (крэш), вычитаем.
-            // Для простоты просто умножим текущую цену, но с проверкой границ
             let newP = item.price * mult;
-            
-            // Немного рандома, чтобы не было ровно x3.0
             newP = newP * (0.9 + Math.random() * 0.2); 
-            
             item.price = newP;
         } else {
-            // Обычное изменение
             item.price += change;
         }
 
-        // Границы
         if (item.price < item.min) item.price = item.min;
-        // Для слухов можно пробить MAX, это же аномалия
         if (!window.activeMarketRumor || window.activeMarketRumor.id !== item.id) {
             if (item.price > item.max) item.price = item.max;
         }
@@ -155,7 +139,6 @@ function updateGlobalPrices(freezePrices = false) {
         if (item.history.length > 10) item.history.shift();
     });
 
-    // После обычного прыжка слух сгорает
     window.activeMarketRumor = null;
 }
 
@@ -207,7 +190,7 @@ function renderMarketList() {
         if (marketState.stationStock.sell.includes(item.id)) status = '<span class="status-sell">SELL</span>';
         if (marketState.stationStock.buy.includes(item.id)) status = '<span class="status-buy">BUY</span>';
 
-        const prev = item.history[item.history.length - 2];
+        const prev = item.history[item.history.length - 2] || item.price;
         const diff = item.price - prev;
         const trend = diff >= 0 ? '<span class="trend-up">▲</span>' : '<span class="trend-down">▼</span>';
 
@@ -222,7 +205,6 @@ function renderMarketList() {
     });
 }
 
-// Экспортируем функцию рендера мини-сетки (которая теперь стандартная)
 window.renderMarketGrid = function() {
     if(!marketGridContainer) return;
     const existingItems = marketGridContainer.querySelectorAll('.grid-item-visual');
@@ -232,8 +214,6 @@ window.renderMarketGrid = function() {
         window.placedStorageItems.forEach(item => {
             const div = document.createElement('div');
             div.className = 'grid-item-visual';
-            
-            // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: Box Sizing ---
             div.style.boxSizing = 'border-box';
 
             if (item.type === 'fuel') {
@@ -245,7 +225,7 @@ window.renderMarketGrid = function() {
             }
 
             const step = 47; 
-            const pad = 4; // Padding 4px
+            const pad = 4;
             
             div.style.width = (item.w * step - 2) + 'px';
             div.style.height = (item.h * step - 2) + 'px';
@@ -334,7 +314,6 @@ function drawGraph(item, hoverX) {
         y: h - ((data[idx] - minVal) / range) * h
     });
 
-    // Заливка
     const grad = marketCtx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, 'rgba(0, 229, 255, 0.15)');
     grad.addColorStop(1, 'rgba(0, 229, 255, 0)');
@@ -350,7 +329,6 @@ function drawGraph(item, hoverX) {
     marketCtx.fillStyle = grad;
     marketCtx.fill();
 
-    // Линия
     marketCtx.strokeStyle = '#00e5ff';
     marketCtx.lineWidth = 2;
     marketCtx.shadowBlur = 0;
@@ -362,7 +340,6 @@ function drawGraph(item, hoverX) {
     });
     marketCtx.stroke();
 
-    // Курсор
     if (hoverX >= 0) {
         const step = w / 9;
         const index = Math.round(hoverX / step);
@@ -370,7 +347,6 @@ function drawGraph(item, hoverX) {
             const p = getPoint(index);
             const val = data[index];
 
-            // Перекрестие
             marketCtx.strokeStyle = '#444';
             marketCtx.lineWidth = 1;
             marketCtx.setLineDash([4, 4]);
@@ -456,3 +432,32 @@ function tryAutoBuyCargo(id, name, cost) {
     }
     return false;
 }
+
+// --- НОВЫЕ ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ РЫНКА ---
+
+// 1. Экспорт данных для сохранения в Firebase
+window.getMarketSaveData = function() {
+    return {
+        // Сохраняем все товары с их текущими ценами и историей
+        items: marketState.items,
+        // Сохраняем списки того, что станция продает и покупает
+        stock: marketState.stationStock
+    };
+};
+
+// 2. Импорт данных при загрузке игры
+window.restoreMarketSaveData = function(data) {
+    if (!data) return;
+    
+    // Восстанавливаем товары (цены, история для графиков)
+    if (data.items) {
+        marketState.items = data.items;
+    }
+    
+    // Восстанавливаем ассортимент станции
+    if (data.stock) {
+        marketState.stationStock = data.stock;
+    }
+    
+    console.log("Market data restored.");
+};

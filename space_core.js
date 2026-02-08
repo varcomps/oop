@@ -1,5 +1,4 @@
-
-/* space_core.js - Исправлен сброс сканера: теперь он очищается при ЛЮБОМ прыжке */
+/* space_core.js */
 
 const mapUI = document.getElementById('mapUI');
 const jumpBtn = document.getElementById('jumpBtn');
@@ -240,13 +239,10 @@ function updateWarpLogic() {
             warpState.phase = WARP_EXIT; 
             warpState.timer = 0; 
             
-            // --- ИСПРАВЛЕНИЕ: Промежуточные сектора ---
             if (autoJumpState.active && autoJumpState.jumpsLeft > 0) {
-                // Если мы в автопилоте и это не последний прыжок - система НЕ генерируется
                 currentSystemType = null; 
             } 
             else {
-                // Финальная цель или ручной прыжок - генерируем систему
                 currentSystemType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
                 
                 if (currentSystemType === 'station') {
@@ -298,10 +294,7 @@ function updateWarpLogic() {
             isWarping = false; 
             isDocked = false; 
 
-            // --- ИСПРАВЛЕНИЕ: СБРОС СПЕКТРА ПРИ ЛЮБОМ ПРИБЫТИИ ---
-            // Вынесли за пределы if(autoJumpState.active), чтобы работало и при ручном прыжке
             if (window.resetSpectrum) window.resetSpectrum();
-            // -----------------------------------------------------
             
             if (autoJumpState.active) {
                 autoJumpState.active = false;
@@ -329,20 +322,34 @@ function updateWarpLogic() {
                 }
             }
 
-            // Запускаем радио только если это не промежуточный прыжок (мы уже прибыли)
-            // И если прыжок был не супер-стабильным
             if (!warpState.isPremiumJump && window.checkIncomingTransmission) {
                 window.checkIncomingTransmission();
             }
 
+            // --- ИЗМЕНЕНИЕ: Не генерируем рынок заново, если он уже был загружен ---
             if (currentSystemType === 'station' && window.generateStationInventory) {
-                if (window.marketState && (!window.marketState.items || window.marketState.items.length === 0)) if(window.initMarket) initMarket();
-                generateStationInventory();
+                // Если рынок пуст (новая игра или прыжок в новую станцию), инициализируем его
+                if (window.marketState && (!window.marketState.items || window.marketState.items.length === 0)) {
+                    if(window.initMarket) initMarket();
+                    generateStationInventory();
+                }
+                // Если уже есть данные (например, загрузка), то оставляем как есть.
+                // Но если это ПРЫЖОК (мы только что прилетели), нам нужно сбросить старый рынок
+                // Мы можем проверить это по isGameLoaded из firebase_manager.js, но он там локальный.
+                // Лучше просто всегда генерировать при прыжке.
+                // А при загрузке сохранения setVisualState перезапишет это.
+                else {
+                     generateStationInventory();
+                }
             }
+            // -----------------------------------------------------------------------
             
             if (mapShip.x < -1000 || mapShip.x > canvas.width + 1000 || mapShip.y < -1000 || mapShip.y > canvas.height + 1000) {
                  mapShip.x = canvas.width/2; mapShip.y = canvas.height/2; mapShip.vx = 0; mapShip.vy = 0;
             }
+            
+            // Сохраняемся после прыжка (автосейв новой системы)
+            if (window.saveGameData) window.saveGameData();
         }
     }
 }
@@ -458,3 +465,51 @@ function drawMap() {
     if (inputs.up && !isWarping && !isDocked) { ctx.fillStyle = '#ffb74d'; ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-12, 4); ctx.lineTo(-12, -4); ctx.fill(); }
     ctx.restore();
 }
+
+// --- НОВЫЕ ФУНКЦИИ ДЛЯ ЭКСПОРТА/ИМПОРТА СОСТОЯНИЯ МИРА ---
+
+window.getVisualState = function() {
+    let state = {
+        systemType: currentSystemType || 'deep_space',
+        theme: bgState.currentTheme,
+        stationData: {
+            x: station.x,
+            y: station.y,
+            visible: station.visible
+        }
+    };
+
+    // Если мы на станции, сохраняем рыночные данные
+    if (currentSystemType === 'station' && window.getMarketSaveData) {
+        state.marketData = window.getMarketSaveData();
+    }
+    
+    return state;
+};
+
+window.setVisualState = function(data) {
+    if (!data) return;
+
+    if (data.systemType) {
+        currentSystemType = data.systemType;
+    }
+
+    if (data.theme) {
+        bgState.currentTheme = data.theme;
+        bgState.nextTheme = data.theme;
+        bgState.progress = 0;
+    }
+
+    if (data.stationData) {
+        station.x = data.stationData.x;
+        station.y = data.stationData.y;
+        station.visible = data.stationData.visible;
+    }
+
+    // Если есть рыночные данные, восстанавливаем их
+    if (data.marketData && window.restoreMarketSaveData) {
+        window.restoreMarketSaveData(data.marketData);
+    }
+
+    if (window.drawSpaceBackground) window.drawSpaceBackground(currentState === STATE_MAP);
+};

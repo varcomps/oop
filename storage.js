@@ -252,6 +252,7 @@ window.consumeSpecificFuel = function(type) {
     
     let index = window.placedStorageItems.findIndex(i => i.type === targetType);
     
+    // Если искали обычное, но не нашли, ищем премиум (если логика позволяет)
     if (index === -1 && type === 'normal') {
         index = window.placedStorageItems.findIndex(i => i.type === 'fuel_premium');
     }
@@ -260,6 +261,11 @@ window.consumeSpecificFuel = function(type) {
         window.placedStorageItems.splice(index, 1);
         updateFuelUI();
         window.renderStorageGrid();
+        
+        // === ДОБАВЛЕНО: СОХРАНЕНИЕ ПОСЛЕ ТРАТЫ ТОПЛИВА ===
+        if (window.saveGameData) window.saveGameData(); 
+        // ================================================
+        
         return true;
     }
     return false;
@@ -274,5 +280,9 @@ function consumeFuel(amount) {
         window.placedStorageItems.splice(fuelIndex, 1);
         updateFuelUI();
         window.renderStorageGrid(); 
+
+        // === ДОБАВЛЕНО: СОХРАНЕНИЕ ПОСЛЕ ТРАТЫ ТОПЛИВА ===
+        if (window.saveGameData) window.saveGameData();
+        // ================================================
     }
 }

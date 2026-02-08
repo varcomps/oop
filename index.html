@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>Deep Space: Modular</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400&family=Share+Tech+Mono&display=swap');
 
@@ -11,12 +15,46 @@
         canvas { display: block; background-color: #050505; cursor: crosshair; }
 
         /* UI: HUD */
-        #hud-top-left { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 150; pointer-events: none; transition: left 0.3s; }
+        #hud-top-left { position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 5px; z-index: 150; pointer-events: none; transition: left 0.3s; }
         .hud-display { font-family: 'Orbitron', sans-serif; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px rgba(0,0,0,0.5); display: flex; align-items: center; }
         .currency-text { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
-        .fuel-text { color: #00e676; text-shadow: 0 0 10px rgba(0, 230, 118, 0.5); font-size: 20px; }
+        .fuel-text { color: #00e676; text-shadow: 0 0 10px rgba(0, 230, 118, 0.5); font-size: 20px; margin-top: 5px; }
         .sc-symbol { font-size: 16px; color: #888; margin-left: 5px; }
         .fuel-label { font-size: 14px; color: #555; margin-right: 10px; letter-spacing: 2px; }
+
+        /* --- NICKNAME & LOGOUT STYLES --- */
+        .nick-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+            pointer-events: auto;
+        }
+        #nicknameDisplay {
+            color: #00e5ff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: color 0.2s;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+        #nicknameDisplay:hover {
+            color: #fff;
+            text-shadow: 0 0 10px #00e5ff;
+        }
+        .logout-sq {
+            width: 12px;
+            height: 12px;
+            background-color: #ff1744;
+            border: 1px solid #ff5252;
+            box-shadow: 0 0 5px #ff1744;
+            cursor: pointer;
+            display: none;
+        }
+        .logout-sq:hover {
+            background-color: #fff;
+            box-shadow: 0 0 10px #ff1744;
+        }
 
         /* UI: MENU */
         #mainMenu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); display: flex; justify-content: center; align-items: center; z-index: 200; transition: opacity 0.8s ease-out; }
@@ -90,173 +128,76 @@
         #chargeBarContainer { width: 350px; height: 6px; background: #111; display: none; border: 1px solid #333; }
         #chargeBar { width: 0%; height: 100%; background: #00e5ff; box-shadow: 0 0 15px #00e5ff; transition: width 0.1s linear; }
 
-        /* === RADIO UI STYLES === */
-        #radioUI { 
-            width: 500px; 
-            /* ВЫСОТА УВЕЛИЧЕНА ДО 550px */
-            height: 550px; 
-            display: none; 
-            flex-direction: column;
-            background: #0b0b0d;
-            border: 1px solid #444;
-            box-shadow: 0 10px 50px rgba(0,0,0,0.9);
-            z-index: 150;
-        }
-        
-        .radio-body { 
-            display: flex; 
-            flex-direction: column; 
-            flex: 1; 
-            background: #0f0f11; 
-            overflow: hidden; 
-        }
-
-        .radio-log-container { 
-            flex: 1; 
-            background: #000; 
-            border: 1px solid #333; 
-            padding: 10px; 
-            font-family: 'Share Tech Mono', monospace; 
-            font-size: 12px; 
-            overflow-y: auto; 
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-            min-height: 0; 
-        }
-        
+        /* RADIO UI REDESIGN */
+        #radioUI { width: 700px; height: 500px; display: none; flex-direction: column; background: #0b0b0d; border: 1px solid #444; box-shadow: 0 10px 50px rgba(0,0,0,0.9); z-index: 150; }
+        .radio-body { display: flex; flex-direction: column; flex: 1; background: #0f0f11; overflow: hidden; }
+        .radio-log-container { flex: 1; background: #000; border: 1px solid #333; padding: 10px; font-family: 'Share Tech Mono', monospace; font-size: 12px; overflow-y: auto; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); min-height: 0; }
         .radio-controls { height: 60px; display: flex; gap: 10px; border-top: 1px solid #333; padding-top: 10px; flex-shrink: 0; }
         .radio-btn { flex: 1; background: #1a1a1a; border: 1px solid #333; color: #888; font-family: 'Orbitron'; font-size: 12px; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .radio-btn:hover:not(:disabled) { background: #222; border-color: #555; color: #fff; }
         .radio-btn.btn-sos { border-color: #5d1010; background: #2b0b0b; color: #ff5252; }
         .radio-btn.btn-sos:hover:not(:disabled) { background: #ff1744; color: #000; box-shadow: 0 0 15px #ff1744; }
         .cost-sub { font-size: 10px; opacity: 0.7; margin-top: 4px; }
-
-        /* Вкладки */
         .radio-tabs { display: flex; background: #111; border-bottom: 1px solid #333; flex-shrink: 0; }
         .radio-tab-btn { flex: 1; padding: 10px; background: transparent; border: none; color: #666; font-family: 'Orbitron', sans-serif; font-size: 12px; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
         .radio-tab-btn:hover { background: #1a1a1a; color: #ccc; }
         .radio-tab-btn.active { color: #00e5ff; border-bottom: 2px solid #00e5ff; background: #141416; }
-
-        /* Контейнеры контента */
+        
         .radio-view { display: none; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
         .radio-view.active { display: flex; }
 
-        /* Личные сообщения: Список контактов */
-        .contact-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding: 5px; }
-        .contact-item { 
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px; background: #1a1a1a; border: 1px solid #333; 
-            cursor: pointer; transition: 0.2s; font-family: 'Roboto'; font-size: 12px; color: #aaa;
-        }
-        .contact-item:hover { background: #222; border-color: #555; color: #fff; }
-        .contact-item.has-unread { border-left: 3px solid #00e676; background: #1e221e; }
-        .contact-name { font-weight: bold; font-family: 'Orbitron'; }
-        .unread-badge { background: #00e676; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        /* SPLIT VIEW FOR PERSONAL CHAT */
+        .personal-split { display: flex; flex: 1; height: 100%; overflow: hidden; }
+        
+        /* LEFT COLUMN (Contacts) */
+        .radio-sidebar { width: 220px; border-right: 1px solid #333; display: flex; flex-direction: column; background: #111; flex-shrink: 0; }
+        .add-contact-row { display: flex; padding: 8px; gap: 5px; border-bottom: 1px solid #333; }
+        .contact-input { flex: 1; background: #000; border: 1px solid #333; color: #fff; font-family: 'Share Tech Mono'; padding: 4px; font-size: 12px; }
+        .contact-input:focus { border-color: #00e5ff; outline: none; }
+        .btn-plus { width: 25px; background: #222; border: 1px solid #444; color: #00e5ff; font-weight: bold; cursor: pointer; }
+        .btn-plus:hover { background: #333; border-color: #00e5ff; }
 
-        /* Личные сообщения: Окно чата */
-        .chat-view-container { display: flex; flex-direction: column; flex: 1; background: #0f0f11; }
-        .chat-header-bar { 
-            padding: 8px; background: #141416; border-bottom: 1px solid #333; 
-            display: flex; align-items: center; gap: 10px; font-family: 'Orbitron'; font-size: 12px; color: #00e5ff; 
-        }
-        .back-btn { cursor: pointer; color: #666; font-weight: bold; padding: 2px 8px; border: 1px solid #333; }
-        .back-btn:hover { color: #fff; border-color: #fff; }
+        .contact-list { flex: 1; overflow-y: auto; padding: 0; }
+        .contact-item { padding: 10px; border-bottom: 1px solid #222; cursor: pointer; font-family: 'Orbitron'; font-size: 11px; color: #888; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
+        .contact-item:hover { background: #1e1e20; color: #ccc; }
+        .contact-item.active { background: #263238; color: #fff; border-left: 2px solid #00e5ff; }
+        .contact-item.has-unread { color: #00e676; }
+        
+        /* RIGHT COLUMN (Chat) */
+        .radio-main { flex: 1; display: flex; flex-direction: column; background: #0f0f11; }
+        .chat-console { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+        .chat-input-bar { padding: 8px; border-top: 1px solid #333; display: flex; gap: 5px; background: #141416; }
+        .msg-input { flex: 1; background: #050505; border: 1px solid #333; color: #fff; padding: 6px; font-family: 'Share Tech Mono'; font-size: 12px; }
+        .msg-input:focus { border-color: #00e5ff; outline: none; }
+        .btn-send { background: #222; border: 1px solid #444; color: #ccc; padding: 0 15px; cursor: pointer; font-family: 'Orbitron'; font-size: 10px; }
+        .btn-send:hover { background: #004d40; border-color: #00e676; color: #fff; }
 
-        .chat-messages-area { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-        .chat-msg { max-width: 80%; padding: 8px; border-radius: 4px; font-size: 12px; line-height: 1.4; word-wrap: break-word; }
-        .chat-msg.incoming { align-self: flex-start; background: #263238; color: #eceff1; border-left: 2px solid #00e5ff; }
-        .chat-msg.outgoing { align-self: flex-end; background: #3e2723; color: #d7ccc8; border-right: 2px solid #ffab91; }
-        .chat-msg-time { font-size: 9px; opacity: 0.5; margin-bottom: 2px; display: block; }
-
-        /* ДЛЯ DRAG & DROP */
+        .console-msg { word-wrap: break-word; line-height: 1.4; }
+        .console-msg.in { color: #ccc; }
+        .console-msg.out { color: #888; }
+        .console-time { color: #444; margin-right: 5px; font-size: 10px; }
+        
         .draggable-header { cursor: grab; }
         .draggable-header:active { cursor: grabbing; }
         .manual-pos { transform: none !important; top: 0; left: 0; margin: 0; }
 
-        /* === 3D STAR MAP UI === */
-        #spectrumUI { 
-            display: none; 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0, 0, 0, 0.8); 
-            z-index: 180; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-        }
-        
-        .sp-window-container {
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
-        }
-
-        .sp-3d-wrapper {
-            position: relative;
-            width: 800px; height: 600px;
-            background: #000;
-            border: 2px solid #333;
-            border-bottom: none; 
-        }
-
+        /* 3D STAR MAP UI */
+        #spectrumUI { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 180; flex-direction: column; align-items: center; justify-content: center; }
+        .sp-window-container { display: flex; flex-direction: column; box-shadow: 0 0 50px rgba(0, 0, 0, 0.8); }
+        .sp-3d-wrapper { position: relative; width: 800px; height: 600px; background: #000; border: 2px solid #333; border-bottom: none; }
         canvas#sp3dCanvas { width: 100%; height: 100%; display: block; cursor: move; }
-
-        .sp-header-overlay {
-            position: absolute; top: 0; left: 0; width: 100%;
-            padding: 10px; box-sizing: border-box;
-            pointer-events: none;
-            display: flex; justify-content: flex-end;
-        }
-        .sp-close-btn {
-            pointer-events: auto; color: #555; font-weight: bold; cursor: pointer; font-family: 'Orbitron';
-        }
+        .sp-header-overlay { position: absolute; top: 0; left: 0; width: 100%; padding: 10px; box-sizing: border-box; pointer-events: none; display: flex; justify-content: flex-end; }
+        .sp-close-btn { pointer-events: auto; color: #555; font-weight: bold; cursor: pointer; font-family: 'Orbitron'; }
         .sp-close-btn:hover { color: #ff5252; }
-
-        .sp-control-frame {
-            width: 800px;
-            background: #222; 
-            border: 2px solid #333;
-            border-top: 1px solid #444;
-            padding: 20px;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: center; 
-            gap: 20px;
-        }
-
-        .sp-btn {
-            background: #333; 
-            border: 2px solid #555; 
-            color: #ccc;
-            padding: 12px 40px; 
-            font-family: 'Orbitron'; font-size: 16px; 
-            cursor: pointer;
-            transition: 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        .sp-control-frame { width: 800px; background: #222; border: 2px solid #333; border-top: 1px solid #444; padding: 20px; box-sizing: border-box; display: flex; justify-content: center; gap: 20px; }
+        .sp-btn { background: #333; border: 2px solid #555; color: #ccc; padding: 12px 40px; font-family: 'Orbitron'; font-size: 16px; cursor: pointer; transition: 0.2s; text-transform: uppercase; letter-spacing: 1px; }
         .sp-btn:hover { background: #444; border-color: #00e5ff; color: #fff; }
-        
-        .sp-engage-btn {
-            display: none; 
-            background: #2a0e38; 
-            border-color: #d500f9; 
-            color: #ea80fc;
-        }
-        .sp-engage-btn:hover { background: #d500f9; color: #fff; box-shadow: 0 0 20px #d500f9; }
 
         /* BUILD MENU */
-        #buildMenu { 
-            display: flex; position: absolute; top: 0; bottom: 0; left: -200px; width: 200px;
-            background: #0f0f11; border-right: 1px solid #333; box-shadow: 5px 0 30px rgba(0,0,0,0.8);
-            z-index: 200; flex-direction: column; overflow: visible; 
-            transition: left 0.3s cubic-bezier(0.1, 0.7, 0.1, 1); 
-        }
+        #buildMenu { display: flex; position: absolute; top: 0; bottom: 0; left: -200px; width: 200px; background: #0f0f11; border-right: 1px solid #333; box-shadow: 5px 0 30px rgba(0,0,0,0.8); z-index: 200; flex-direction: column; overflow: visible; transition: left 0.3s cubic-bezier(0.1, 0.7, 0.1, 1); }
         #buildMenu.slide-in { left: 0; }
         #buildMenu.hidden-state { display: none !important; }
-        .build-handle-strip {
-            position: absolute; top: 0; bottom: 0; right: -30px; width: 20px;
-            display: none; flex-direction: column; justify-content: space-evenly; align-items: center;
-            pointer-events: none; padding: 20px 0;
-        }
+        .build-handle-strip { position: absolute; top: 0; bottom: 0; right: -30px; width: 20px; display: none; flex-direction: column; justify-content: space-evenly; align-items: center; pointer-events: none; padding: 20px 0; }
         .handle-tri { width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid #00e5ff; }
         .build-header { padding: 15px; border-bottom: 1px solid #333; background: #141416; }
         .build-title { font-family: 'Orbitron'; font-size: 16px; color: #00e5ff; letter-spacing: 1px; }
@@ -266,32 +207,104 @@
         .items-container { padding: 5px; display: flex; flex-direction: column; gap: 5px; overflow-y: hidden; flex: 1; }
         .category-group { display: none; flex-direction: column; gap: 5px; width: 100%; }
         .category-group.visible { display: flex; }
-        .module-item { 
-            display: flex; flex-direction: row; align-items: center; justify-content: flex-start;
-            width: 100%; height: 40px; padding: 0 8px;
-            background: #1e1e20; border: 1px solid #333; border-radius: 4px; 
-            color: #ccc; cursor: pointer; transition: all 0.2s; box-sizing: border-box;
-        }
+        .module-item { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; height: 40px; padding: 0 8px; background: #1e1e20; border: 1px solid #333; border-radius: 4px; color: #ccc; cursor: pointer; transition: all 0.2s; box-sizing: border-box; }
         .module-item:hover { background: #252528; border-color: #555; }
         .module-item.active { background: #004d40; color: #fff; border-color: #00bcd4; }
         .mod-icon { width: 22px; height: 22px; background: #333; border: 1px solid #444; margin-right: 8px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #666; }
         .mod-info { display: flex; flex-direction: column; flex: 1; }
         .mod-name { font-size: 11px; font-weight: bold; text-transform: uppercase; }
-        #ui-hint { 
-            position: absolute; bottom: 30px; width: 100%; text-align: center; font-family: 'Orbitron', sans-serif; pointer-events: none; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; z-index: 100;
-            color: #ffffff; 
-            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
-            font-weight: bold;
-            font-size: 18px;
-        }
+        
+        #ui-hint { position: absolute; bottom: 30px; width: 100%; text-align: center; font-family: 'Orbitron', sans-serif; pointer-events: none; transition: all 0.3s; text-transform: uppercase; letter-spacing: 2px; z-index: 100; color: #ffffff; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-weight: bold; font-size: 18px; }
         .sector-normal { font-size: 16px; color: rgba(255, 255, 255, 0.4); text-shadow: 0 0 5px rgba(0, 0, 0, 0.5); }
         .sector-danger { font-size: 20px; font-weight: bold; color: rgba(255, 23, 68, 0.9); text-shadow: 0 0 15px rgba(255, 0, 0, 0.8); animation: dangerPulse 1s infinite alternate; }
         @keyframes dangerPulse { from { opacity: 0.7; transform: scale(1); } to { opacity: 1; transform: scale(1.05); } }
         .hl { color: #fff; font-weight: bold; }
         .count-badge { font-family: 'Orbitron'; font-size: 11px; color: #ffd700; margin-left: auto; }
+
+        /* AUTH MODAL */
+        #authModal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 9999;
+            display: none; 
+            justify-content: center; align-items: center;
+            font-family: 'Orbitron', sans-serif;
+        }
+        .auth-box {
+            background: #111; border: 2px solid #00e5ff; padding: 30px;
+            width: 300px; text-align: center; color: #00e5ff;
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.2);
+        }
+        .auth-input {
+            width: 100%; padding: 10px; margin: 10px 0;
+            background: #222; border: 1px solid #444; color: #fff;
+            font-family: 'Roboto';
+        }
+        .auth-btn {
+            width: 100%; padding: 10px; margin-top: 10px;
+            background: #004d40; border: 1px solid #00e5ff; color: #fff;
+            cursor: pointer; font-weight: bold;
+        }
+        .auth-btn:hover { background: #00e5ff; color: #000; }
+        .toggle-link {
+            font-size: 12px; margin-top: 15px; cursor: pointer; color: #888; text-decoration: underline;
+        }
+        .error-msg { color: #ff1744; font-size: 12px; margin-bottom: 10px; min-height: 15px; }
+
+        /* --- STYLES FOR CHEAT PANEL --- */
+        #cheatPanel {
+            display: none; 
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            width: 250px;
+            background: rgba(10, 0, 0, 0.95);
+            border: 1px solid #ff1744;
+            box-shadow: 0 0 20px rgba(255, 23, 68, 0.2);
+            z-index: 9999;
+            padding: 15px;
+            font-family: 'Share Tech Mono', monospace;
+            color: #00e5ff;
+            flex-direction: column;
+        }
+        #cheatAmount {
+            background: #111;
+            border: 1px solid #333;
+            color: #ffd700;
+            padding: 5px;
+            width: 100px;
+            font-family: monospace;
+        }
+        .cheat-btn {
+            flex: 1;
+            background: #2b0b0b;
+            border: 1px solid #ff5252;
+            color: #ff5252;
+            cursor: pointer;
+            font-family: 'Orbitron';
+            font-size: 10px;
+        }
+        .cheat-btn:hover {
+            background: #ff1744;
+            color: #000;
+        }
+
     </style>
 </head>
 <body>
+
+<div id="authModal">
+    <div class="auth-box">
+        <h2 id="authTitle">LOGIN</h2>
+        <div id="authError" class="error-msg"></div>
+        
+        <input type="text" id="authNick" class="auth-input" placeholder="Nickname (Unique)" style="display:none">
+        <input type="email" id="authEmail" class="auth-input" placeholder="Email">
+        <input type="password" id="authPass" class="auth-input" placeholder="Password">
+        
+        <button class="auth-btn" onclick="handleAuth()">ENTER SYSTEM</button>
+        <div class="toggle-link" onclick="toggleAuthMode()">No account? Register</div>
+    </div>
+</div>
 
 <div id="buildMenu">
     <div class="build-handle-strip">
@@ -322,6 +335,11 @@
 </div>
 
 <div id="hud-top-left">
+    <div class="hud-display nick-row">
+        <div id="logoutBtn" class="logout-sq" onclick="logoutUser()" title="LOGOUT"></div>
+        <span id="nicknameDisplay" onclick="toggleLogoutOption()">PILOT</span>
+    </div>
+
     <div class="hud-display currency-text" id="currencyDisplay">0.0010 <span class="sc-symbol">SC</span></div>
     <div class="hud-display fuel-text" id="fuelDisplay"><span class="fuel-label">ТОПЛИВО</span> <span id="fuelVal">0</span></div>
 </div>
@@ -406,43 +424,17 @@
     <div id="chargeBarContainer"><div id="chargeBar"></div></div>
 </div>
 
-<div id="radioUI" class="ui-window">
-    <div class="ui-header draggable-header" id="radioHeader">
-        <span>СИСТЕМА СВЯЗИ</span>
-        <span class="close-btn" onclick="toggleRadio(false)">ЗАКРЫТЬ [ESC]</span>
+<div id="cheatPanel">
+    <div style="color: #ff1744; margin-bottom: 10px; border-bottom: 1px solid #ff1744; padding-bottom: 5px;">
+        ADMIN TERMINAL: <span style="color: #fff;">varcomp</span>
     </div>
     
-    <div class="radio-tabs">
-        <button class="radio-tab-btn active" id="tab-general" onclick="switchRadioTab('general')">ОБЩИЙ ЭФИР</button>
-        <button class="radio-tab-btn" id="tab-personal" onclick="switchRadioTab('personal')">ЛИЧНЫЕ</button>
-    </div>
-
-    <div class="radio-body" style="padding: 0;"> 
-        
-        <div id="view-general" class="radio-view active" style="padding: 10px; box-sizing: border-box;">
-            <div class="radio-log-container" id="radioLog"></div>
-            <div class="radio-controls">
-                <button class="radio-btn btn-sos" onclick="requestDistressCall()">
-                    <span>АВАРИЙНЫЙ МАЯК (SOS)</span>
-                    <span class="cost-sub">0.0010 SC</span>
-                </button>
-            </div>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+        <label style="font-size: 10px; color: #888;">ADD CREDITS</label>
+        <div style="display: flex; gap: 5px;">
+            <input type="text" id="cheatAmount" placeholder="Amount" value="1000">
+            <button onclick="devAddMoney()" class="cheat-btn">EXECUTE</button>
         </div>
-
-        <div id="view-personal" class="radio-view">
-            <div id="personal-contacts" class="contact-list">
-                <div style="padding:20px; text-align:center; color:#444; font-size:12px;">НЕТ АКТИВНЫХ ДИАЛОГОВ</div>
-            </div>
-
-            <div id="personal-chat" class="chat-view-container" style="display:none;">
-                <div class="chat-header-bar">
-                    <div class="back-btn" onclick="closeChat()">◄</div>
-                    <div id="chat-contact-name">UNKNOWN</div>
-                </div>
-                <div id="chat-history" class="chat-messages-area"></div>
-            </div>
-        </div>
-
     </div>
 </div>
 
@@ -450,7 +442,7 @@
 <canvas id="gameCanvas"></canvas>
 
 <script src="data.js"></script>
-<script src="storage.js"></script>
+<script src="firebase_manager.js"></script> <script src="storage.js"></script>
 <script src="ship.js"></script>
 
 <script src="sector_system.js"></script>

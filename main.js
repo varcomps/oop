@@ -1,4 +1,4 @@
-/* main.js - Убрана подсказка [R] COMMS */
+/* main.js - Полная версия с блокировкой ввода */
 
 // Глобальный флаг правой кнопки (для перетаскивания удаления)
 let isRightMouseDown = false;
@@ -9,6 +9,9 @@ function initGame() {
     initShip();
     initSpace();
     if (window.initSpectrum) initSpectrum(); 
+    
+    if (window.renderStorageGrid) window.renderStorageGrid();
+    
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'none';
 }
@@ -20,7 +23,7 @@ function resize() {
     const scaleY = canvas.height / TARGET_ROWS;
     TILE_SIZE = Math.min(scaleX, scaleY);
     
-    // ИСПРАВЛЕНИЕ: Проверяем новые слои фона вместо старого массива stars
+    // Проверяем новые слои фона вместо старого массива stars
     if (window.bgLayers && window.bgLayers.stars.length === 0) {
         if (window.generateDeepSpace) generateDeepSpace();
     }
@@ -48,7 +51,7 @@ function startTransition(toState) {
     if (isSpectrumOpen && window.toggleSpectrum) toggleSpectrum(false);
     if (isMarketOpen && window.toggleMarket) toggleMarket(false);
     
-    // --- НОВОЕ: Закрываем радио при переходе ---
+    // Закрываем радио при переходе
     if (typeof isRadioOpen !== 'undefined' && isRadioOpen) toggleRadio(false);
 
     uiHint.style.display = 'none'; inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
@@ -159,7 +162,10 @@ function update() {
         // Блокируем движение, если открыто любое UI
         const isAnyUIOpen = isBuildMenuOpen || isStorageOpen || isSpectrumOpen || isMarketOpen || (typeof isRadioOpen !== 'undefined' && isRadioOpen);
         
-        if (!isAnyUIOpen) {
+        // --- ВАЖНОЕ ИЗМЕНЕНИЕ: БЛОКИРОВКА ПРИ ВВОДЕ ТЕКСТА ---
+        const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
+        
+        if (!isAnyUIOpen && !isTyping) {
             if (inputs.up) dy = -moveSpeed; if (inputs.down) dy = moveSpeed;
             if (inputs.left) dx = -moveSpeed; if (inputs.right) dx = moveSpeed;
         }
@@ -218,8 +224,10 @@ function update() {
         
         if (window.updateBlackHolePhysics) window.updateBlackHolePhysics(); 
 
-        // Блокируем управление кораблем на карте, если открыто радио
-        if (!isWarping && !isDocked && (!window.isRadioOpen)) { 
+        const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
+        
+        // Блокируем управление кораблем на карте, если открыто радио ИЛИ идет ввод текста
+        if (!isWarping && !isDocked && (!window.isRadioOpen) && !isTyping) { 
             if (inputs.left) mapShip.angle -= mapShip.rotationSpeed;
             if (inputs.right) mapShip.angle += mapShip.rotationSpeed;
             if (inputs.up) { mapShip.vx += Math.cos(mapShip.angle) * mapShip.thrust; mapShip.vy += Math.sin(mapShip.angle) * mapShip.thrust; }
@@ -264,7 +272,6 @@ function update() {
         } else {
             dockBtn.style.display = 'none';
             uiHint.className = infoClass;
-            // ИЗМЕНЕНИЕ: Убрана подсказка про COMMS [R]
             uiHint.innerHTML = infoText;
         }
     }
@@ -298,6 +305,14 @@ canvas.addEventListener('mouseup', () => { isMouseDown = false; isRightMouseDown
 canvas.addEventListener('mouseleave', () => { isMouseDown = false; isRightMouseDown = false; });
 
 window.addEventListener('keydown', (e) => {
+    // ЕСЛИ ВВОДИМ ТЕКСТ В INPUT - ИГНОРИРУЕМ ИГРОВЫЕ КЛАВИШИ
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+        if (e.code === 'Escape') {
+            document.activeElement.blur(); // Снимаем фокус по ESC
+        }
+        return; 
+    }
+
     if (transition.active) return;
     if (currentState === STATE_MENU) return;
     
@@ -789,7 +804,7 @@ function drawCaptainBridge(gx, gy, wTiles, hTiles) {
         for (let i = x + bit; i < x + w - bit; i += bit * 1.5) { 
             ctx.fillRect(i, y + TILE_SIZE * 0.04, bit * 0.5, bit * 0.25); 
             ctx.fillRect(i, y + h - TILE_SIZE * 0.16, bit * 0.5, bit * 0.25); 
-        }   
+        } 
     }
     ctx.save(); 
     ctx.translate(cx, cy);
@@ -803,7 +818,7 @@ function drawCaptainBridge(gx, gy, wTiles, hTiles) {
         ctx.moveTo(0, -TILE_SIZE * 0.3); 
         ctx.lineTo(TILE_SIZE * 0.2, TILE_SIZE * 0.2); 
         ctx.lineTo(0, TILE_SIZE * 0.1); 
-        ctx.lineTo(-TILE_SIZE * 0.2, TILE_SIZE * 0.2);  
+        ctx.lineTo(-TILE_SIZE * 0.2, TILE_SIZE * 0.2); 
         ctx.fill();
     } else { 
         ctx.fillStyle = '#37474f'; ctx.beginPath(); ctx.arc(0, 0, TILE_SIZE * 0.3, 0, Math.PI * 2); ctx.fill(); 
@@ -817,3 +832,64 @@ function drawAirlock(gx, gy, wTiles, hTiles) {
     ctx.fillStyle = isDocked ? '#00e676' : '#d32f2f'; ctx.beginPath(); ctx.arc(x+w/2, y+h/2, 4, 0, Math.PI*2); ctx.fill();
     if (interactables.airlock.active) { ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.strokeRect(x,y,w,h); }
 }
+
+// --- DEV TOOLS FOR VARCOMP ---
+
+window.addEventListener('keydown', (e) => {
+    // Проверяем, нажата ли 'h'
+    if (e.code === 'KeyH') {
+        
+        const nickDisplay = document.getElementById('nicknameDisplay');
+        if (!nickDisplay) return;
+
+        // ВАЖНО: Мы берем текст как есть, без перевода в верхний регистр
+        const currentNick = nickDisplay.innerText.trim();
+
+        // Строгая проверка: только если ник в точности "varcomp"
+        if (currentNick === 'varcomp') {
+            toggleCheatPanel();
+        } else {
+            // Если ник другой (даже Varcomp), доступа не будет
+            console.log("Access Denied. Identity mismatch.");
+        }
+    }
+});
+
+function toggleCheatPanel() {
+    const panel = document.getElementById('cheatPanel');
+    if (!panel) return;
+
+    if (panel.style.display === 'flex') {
+        panel.style.display = 'none';
+    } else {
+        panel.style.display = 'flex';
+    }
+}
+
+// ИСПРАВЛЕНИЕ: Теперь можно вводить отрицательные числа
+window.devAddMoney = function() {
+    const input = document.getElementById('cheatAmount');
+    const amount = parseFloat(input.value);
+
+    // Проверяем, что число валидное и не равно нулю
+    if (!isNaN(amount) && amount !== 0) {
+        player.credits += amount;
+        
+        if (window.updateCurrencyUI) window.updateCurrencyUI();
+        if (window.saveGameData) window.saveGameData();
+
+        console.log(`%c[DEV] Modified credits by ${amount} SC.`, "color: #00e676; font-weight: bold;");
+        
+        const btn = document.querySelector('.cheat-btn');
+        const originalText = btn.innerText;
+        btn.innerText = "DONE";
+        btn.style.backgroundColor = "#00e676";
+        btn.style.color = "#000";
+        
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.style.backgroundColor = "#2b0b0b";
+            btn.style.color = "#ff5252";
+        }, 500);
+    }
+};
