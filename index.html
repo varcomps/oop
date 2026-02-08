@@ -90,10 +90,11 @@
         #chargeBarContainer { width: 350px; height: 6px; background: #111; display: none; border: 1px solid #333; }
         #chargeBar { width: 0%; height: 100%; background: #00e5ff; box-shadow: 0 0 15px #00e5ff; transition: width 0.1s linear; }
 
-        /* === RADIO UI STYLES (FIXED) === */
+        /* === RADIO UI STYLES === */
         #radioUI { 
             width: 500px; 
-            height: 400px; /* Фиксированная высота */
+            /* ВЫСОТА УВЕЛИЧЕНА ДО 550px */
+            height: 550px; 
             display: none; 
             flex-direction: column;
             background: #0b0b0d;
@@ -106,22 +107,20 @@
             display: flex; 
             flex-direction: column; 
             flex: 1; 
-            padding: 10px; 
             background: #0f0f11; 
-            gap: 10px;
-            overflow: hidden; /* Важно: скрываем всё, что вылезает за пределы body */
+            overflow: hidden; 
         }
 
         .radio-log-container { 
-            flex: 1; /* Занимает всё оставшееся место */
+            flex: 1; 
             background: #000; 
             border: 1px solid #333; 
             padding: 10px; 
             font-family: 'Share Tech Mono', monospace; 
             font-size: 12px; 
-            overflow-y: auto; /* Включаем вертикальный скролл */
+            overflow-y: auto; 
             box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-            min-height: 0; /* Фикс для Flexbox, чтобы скролл работал */
+            min-height: 0; 
         }
         
         .radio-controls { height: 60px; display: flex; gap: 10px; border-top: 1px solid #333; padding-top: 10px; flex-shrink: 0; }
@@ -130,7 +129,48 @@
         .radio-btn.btn-sos { border-color: #5d1010; background: #2b0b0b; color: #ff5252; }
         .radio-btn.btn-sos:hover:not(:disabled) { background: #ff1744; color: #000; box-shadow: 0 0 15px #ff1744; }
         .cost-sub { font-size: 10px; opacity: 0.7; margin-top: 4px; }
-        .sub-cost { font-size: 10px; opacity: 0.7; margin-top: 4px; }
+
+        /* Вкладки */
+        .radio-tabs { display: flex; background: #111; border-bottom: 1px solid #333; flex-shrink: 0; }
+        .radio-tab-btn { flex: 1; padding: 10px; background: transparent; border: none; color: #666; font-family: 'Orbitron', sans-serif; font-size: 12px; cursor: pointer; transition: 0.2s; border-bottom: 2px solid transparent; }
+        .radio-tab-btn:hover { background: #1a1a1a; color: #ccc; }
+        .radio-tab-btn.active { color: #00e5ff; border-bottom: 2px solid #00e5ff; background: #141416; }
+
+        /* Контейнеры контента */
+        .radio-view { display: none; flex-direction: column; flex: 1; overflow: hidden; height: 100%; }
+        .radio-view.active { display: flex; }
+
+        /* Личные сообщения: Список контактов */
+        .contact-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding: 5px; }
+        .contact-item { 
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px; background: #1a1a1a; border: 1px solid #333; 
+            cursor: pointer; transition: 0.2s; font-family: 'Roboto'; font-size: 12px; color: #aaa;
+        }
+        .contact-item:hover { background: #222; border-color: #555; color: #fff; }
+        .contact-item.has-unread { border-left: 3px solid #00e676; background: #1e221e; }
+        .contact-name { font-weight: bold; font-family: 'Orbitron'; }
+        .unread-badge { background: #00e676; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+
+        /* Личные сообщения: Окно чата */
+        .chat-view-container { display: flex; flex-direction: column; flex: 1; background: #0f0f11; }
+        .chat-header-bar { 
+            padding: 8px; background: #141416; border-bottom: 1px solid #333; 
+            display: flex; align-items: center; gap: 10px; font-family: 'Orbitron'; font-size: 12px; color: #00e5ff; 
+        }
+        .back-btn { cursor: pointer; color: #666; font-weight: bold; padding: 2px 8px; border: 1px solid #333; }
+        .back-btn:hover { color: #fff; border-color: #fff; }
+
+        .chat-messages-area { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .chat-msg { max-width: 80%; padding: 8px; border-radius: 4px; font-size: 12px; line-height: 1.4; word-wrap: break-word; }
+        .chat-msg.incoming { align-self: flex-start; background: #263238; color: #eceff1; border-left: 2px solid #00e5ff; }
+        .chat-msg.outgoing { align-self: flex-end; background: #3e2723; color: #d7ccc8; border-right: 2px solid #ffab91; }
+        .chat-msg-time { font-size: 9px; opacity: 0.5; margin-bottom: 2px; display: block; }
+
+        /* ДЛЯ DRAG & DROP */
+        .draggable-header { cursor: grab; }
+        .draggable-header:active { cursor: grabbing; }
+        .manual-pos { transform: none !important; top: 0; left: 0; margin: 0; }
 
         /* === 3D STAR MAP UI === */
         #spectrumUI { 
@@ -367,18 +407,42 @@
 </div>
 
 <div id="radioUI" class="ui-window">
-    <div class="ui-header">
+    <div class="ui-header draggable-header" id="radioHeader">
         <span>СИСТЕМА СВЯЗИ</span>
         <span class="close-btn" onclick="toggleRadio(false)">ЗАКРЫТЬ [ESC]</span>
     </div>
-    <div class="radio-body">
-        <div class="radio-log-container" id="radioLog"></div>
-        <div class="radio-controls">
-            <button class="radio-btn btn-sos" onclick="requestDistressCall()">
-                <span>АВАРИЙНЫЙ МАЯК (SOS)</span>
-                <span class="cost-sub">0.0010 SC</span>
-            </button>
+    
+    <div class="radio-tabs">
+        <button class="radio-tab-btn active" id="tab-general" onclick="switchRadioTab('general')">ОБЩИЙ ЭФИР</button>
+        <button class="radio-tab-btn" id="tab-personal" onclick="switchRadioTab('personal')">ЛИЧНЫЕ</button>
+    </div>
+
+    <div class="radio-body" style="padding: 0;"> 
+        
+        <div id="view-general" class="radio-view active" style="padding: 10px; box-sizing: border-box;">
+            <div class="radio-log-container" id="radioLog"></div>
+            <div class="radio-controls">
+                <button class="radio-btn btn-sos" onclick="requestDistressCall()">
+                    <span>АВАРИЙНЫЙ МАЯК (SOS)</span>
+                    <span class="cost-sub">0.0010 SC</span>
+                </button>
+            </div>
         </div>
+
+        <div id="view-personal" class="radio-view">
+            <div id="personal-contacts" class="contact-list">
+                <div style="padding:20px; text-align:center; color:#444; font-size:12px;">НЕТ АКТИВНЫХ ДИАЛОГОВ</div>
+            </div>
+
+            <div id="personal-chat" class="chat-view-container" style="display:none;">
+                <div class="chat-header-bar">
+                    <div class="back-btn" onclick="closeChat()">◄</div>
+                    <div id="chat-contact-name">UNKNOWN</div>
+                </div>
+                <div id="chat-history" class="chat-messages-area"></div>
+            </div>
+        </div>
+
     </div>
 </div>
 

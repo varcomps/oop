@@ -1,112 +1,203 @@
-/* radio.js - Система связи: Сценарные диалоги, Эфир, SOS */
+/* radio.js - Система связи: Эфир, Личные чаты, Drag&Drop */
 
 const radioUI = document.getElementById('radioUI');
+const radioHeader = document.getElementById('radioHeader');
 const radioLog = document.getElementById('radioLog');
+
+// Стейт вкладок
+let currentRadioTab = 'general';
+let activeChatId = null;
 
 window.isRadioOpen = false;
 window.activeMarketRumor = null; 
 
-// --- СЦЕНАРИИ ДИАЛОГОВ (Рост цены - ПРОГНОЗЫ) ---
-// Логика: "Цена скоро вырастет" или "Там-то платят больше".
-// Игрок понимает: надо закупиться сейчас или придержать груз до следующего прыжка.
+// --- ДАННЫЕ ЛИЧНЫХ СООБЩЕНИЙ ---
+// Структура: { id: 'sys', name: 'SYSTEM', unread: 0, messages: [] }
+window.privateChats = []; // Теперь пустой при старте
+
+// --- СЦЕНАРИИ ОБЩЕГО ЭФИРА (Рынок) ---
 const SCENARIOS_BULLISH = [
-    [ // Сценарий 1: Дефицит (Авария)
-        { name: "ДАЛЬНОБОЙЩИК", color: "#fff176", text: "Слышал новости? На главном заводе в секторе авария." },
-        { name: "ДИСПЕТЧЕР", color: "#4fc3f7", text: "Подтверждаю. Производство встало. Запасов {ITEM} хватит на пару часов." },
-        { name: "ДАЛЬНОБОЙЩИК", color: "#fff176", text: "Значит, к вечеру цена взлетит до небес. Придержу-ка я груз." }
-    ],
-    [ // Сценарий 2: Пираты (Блокада)
-        { name: "ПИРАТ (А)", color: "#ff5252", text: "Мы перекрыли поставки. Ни один транспортник с {ITEM} не прошел." },
-        { name: "ПИРАТ (Б)", color: "#ef9a9a", text: "Отлично. Дефицит уже начался. Завтра продадим наши запасы втридорога." },
-        { name: "ПИРАТ (А)", color: "#ff5252", text: "Рынок будет у нас в руках." }
-    ],
-    [ // Сценарий 3: Инсайд (Скупка)
-        { name: "ШИФР-КАНАЛ", color: "#b39ddb", text: "...директива 7. Начать массовую скупку {ITEM} в следующем цикле." },
-        { name: "АГЕНТ", color: "#9575cd", text: "Принято. Искусственный спрос поднимет котировки." },
-        { name: "ШИФР-КАНАЛ", color: "#b39ddb", text: "Скупайте всё, что есть на станциях, пока дешево." }
-    ],
-    [ // Сценарий 4: Паника (Ажиотаж)
-        { name: "ТОРГОВЕЦ", color: "#ffa726", text: "Ты видел аналитику по {ITEM}? График идет вертикально вверх!" },
-        { name: "КОЛЛЕГА", color: "#ffcc80", text: "Ага, говорят, скоро его вообще не достать будет." },
-        { name: "ТОРГОВЕЦ", color: "#ffa726", text: "Я забиваю трюм под завязку, пока старая цена держится." }
-    ],
-    [ // Сценарий 5: Военный заказ (Подготовка)
-        { name: "ВОЕННЫЙ", color: "#81c784", text: "Внимание гражданским судам. Флот открывает тендер на {ITEM}." },
-        { name: "КАПИТАН", color: "#fff", text: "Опять учения? Платите как обычно?" },
-        { name: "ВОЕННЫЙ", color: "#81c784", text: "Платим по двойному тарифу за срочность. Ждем поставки в секторе." }
-    ]
+    [{ name: "ДАЛЬНОБОЙЩИК", color: "#fff176", text: "Слышал новости? На главном заводе в секторе авария." }, { name: "ДИСПЕТЧЕР", color: "#4fc3f7", text: "Подтверждаю. Производство встало. Запасов {ITEM} хватит на пару часов." }, { name: "ДАЛЬНОБОЙЩИК", color: "#fff176", text: "Значит, к вечеру цена взлетит до небес." }],
+    [{ name: "ПИРАТ", color: "#ff5252", text: "Мы перекрыли поставки {ITEM}." }, { name: "ТОРГОВЕЦ", color: "#ef9a9a", text: "Черт, дефицит уже начался!" }],
+    [{ name: "ШИФР-КАНАЛ", color: "#b39ddb", text: "...массовая скупка {ITEM}. Директива 7." }, { name: "АГЕНТ", color: "#9575cd", text: "Принято. Искусственный спрос поднимет котировки." }]
 ];
-
-// --- СЦЕНАРИИ ДИАЛОГОВ (Падение цены - ПРЕДУПРЕЖДЕНИЯ) ---
-// Логика: "Скоро цена рухнет" или "Рынок переполнен".
-// Игрок понимает: не стоит покупать этот товар, или надо срочно продать, пока берут.
 const SCENARIOS_BEARISH = [
-    [ // Сценарий 1: Перепроизводство (Жила)
-        { name: "ШАХТЕР", color: "#ffa726", text: "Парни, мы нашли гигантскую жилу! Тонны {ITEM}, просто завались!" },
-        { name: "БАЗА", color: "#ffb74d", text: "Идиот! Ты обвалишь рынок!" },
-        { name: "ШАХТЕР", color: "#ffa726", text: "Уже поздно, информация ушла. Завтра {ITEM} будет стоить копейки." }
-    ],
-    [ // Сценарий 2: Конфискат (Сброс)
-        { name: "ПОЛИЦИЯ", color: "#4fc3f7", text: "Склады конфиската забиты под завязку: {ITEM}." },
-        { name: "АУКЦИОН", color: "#81d4fa", text: "Приказ ясен. Выбрасывайте всё на рынок по любой цене." },
-        { name: "ПОЛИЦИЯ", color: "#4fc3f7", text: "Готовьтесь к обвалу цен, товара слишком много." }
-    ],
-    [ // Сценарий 3: Брак (Скандал)
-        { name: "ЗАВОД", color: "#e0e0e0", text: "Внимание: партия {ITEM} признана бракованной. Отзывная кампания." },
-        { name: "ПОСТАВЩИК", color: "#bdbdbd", text: "Да вы шутите? Я только что хотел закупиться!" },
-        { name: "ЗАВОД", color: "#e0e0e0", text: "Не берите. Рыночная стоимость этого мусора скоро будет ноль." }
-    ],
-    [ // Сценарий 4: Насыщение (Конкуренты)
-        { name: "ТОРГОВЕЦ А", color: "#fff176", text: "Видел радары? Сюда идет тяжелый караван." },
-        { name: "ТОРГОВЕЦ Б", color: "#fff59d", text: "Если они везут {ITEM}, то местным ценам конец." },
-        { name: "ТОРГОВЕЦ А", color: "#fff176", text: "Точно везут. Сливай всё сейчас, пока биржу не обновили." }
-    ],
-    [ // Сценарий 5: Смена технологий (Устаревание)
-        { name: "ТЕХНИК", color: "#a1887f", text: "Вышла новая модель, старый {ITEM} больше никому не нужен." },
-        { name: "СКЛАД", color: "#d7ccc8", text: "И куда мне его девать? Списывать?" },
-        { name: "ТЕХНИК", color: "#a1887f", text: "Продавай старьевщикам за гроши, пока хоть кто-то берет." }
-    ]
+    [{ name: "ШАХТЕР", color: "#ffa726", text: "Нашли гигантскую жилу {ITEM}! Просто завались!" }, { name: "БАЗА", color: "#ffb74d", text: "Ты обвалишь рынок, идиот!" }],
+    [{ name: "ПОЛИЦИЯ", color: "#4fc3f7", text: "Конфискат {ITEM} выброшен на аукцион." }, { name: "АУКЦИОН", color: "#81d4fa", text: "Продаем по любой цене." }],
+    [{ name: "ТЕХНИК", color: "#a1887f", text: "{ITEM} устарел. Вышла новая модель." }, { name: "СКЛАД", color: "#d7ccc8", text: "Сливай запасы, пока они хоть что-то стоят." }]
+];
+const SCENARIOS_FLAVOR = [
+    [{ name: "НЕИЗВЕСТНЫЙ", color: "#9e9e9e", text: "...помогите... воздух конча..." }, { name: "СИСТЕМА", color: "#ff5252", text: "СИГНАЛ ПОТЕРЯН." }],
+    [{ name: "ПАТРУЛЬ", color: "#4fc3f7", text: "Борт 7-2-9, заглушить двигатели!" }, { name: "КОНТРАБАНДИСТ", color: "#e040fb", text: "Поймай меня, если сможешь!" }]
 ];
 
-// --- АТМОСФЕРНЫЕ ДИАЛОГИ (Без влияния на рынок) ---
-const SCENARIOS_FLAVOR = [
-    [
-        { name: "НЕИЗВЕСТНЫЙ", color: "#9e9e9e", text: "...помогите... системы жизнеобеспечения... *помехи*" },
-        { name: "СПАСАТЕЛЬ", color: "#81c784", text: "Держитесь, фиксируем ваши координаты. Высылаем дрон." },
-        { name: "НЕИЗВЕСТНЫЙ", color: "#9e9e9e", text: "Быстрее... воздух конча..." }
-    ],
-    [
-        { name: "ПАТРУЛЬ", color: "#4fc3f7", text: "Борт 7-2-9, заглушить двигатели для досмотра." },
-        { name: "КОНТРАБАНДИСТ", color: "#e040fb", text: "Да пошел ты! Прыжок через 3... 2... 1..." },
-        { name: "ПАТРУЛЬ", color: "#4fc3f7", text: "Ушел... Всем постам, объявить в розыск." }
-    ],
-    [
-        { name: "ГРУЗОВИК", color: "#fff176", text: "Эй, кто-нибудь знает, где тут можно поесть нормальной еды?" },
-        { name: "СТАНЦИЯ", color: "#ffb74d", text: "Только синте-мясо и водоросли. Добро пожаловать на фронтир." },
-        { name: "ГРУЗОВИК", color: "#fff176", text: "Господи, я ненавижу этот сектор." }
-    ],
-    [
-        { name: "ЭХО", color: "#555", text: "...странные показания сенсоров в туманности..." },
-        { name: "ЭХО", color: "#666", text: "...оно смотрит на нас..." },
-        { name: "СИСТЕМА", color: "#ff5252", text: "СВЯЗЬ ПРЕРВАНА." }
-    ],
-    [
-        { name: "ПИЛОТ-НОВИЧОК", color: "#80cbc4", text: "Ребята, как включить стыковочный магнит? Я сейчас врежусь!" },
-        { name: "ВЕТЕРАН", color: "#00695c", text: "Alt+F4 пробовал? Шучу. Жми F, салага." }
-    ]
-];
+// --- ИНИЦИАЛИЗАЦИЯ ---
+// Вызывается один раз при загрузке main.js (если нужно) или при первом открытии
+function initRadioDraggable() {
+    if (radioUI && radioHeader) {
+        makeDraggable(radioUI, radioHeader);
+    }
+}
+// Вызовем сразу, чтобы инициализировать обработчики
+setTimeout(initRadioDraggable, 100);
+
+
+// --- ФУНКЦИИ УПРАВЛЕНИЯ UI ---
 
 window.toggleRadio = function(state) {
     if (typeof transition !== 'undefined' && transition.active) return;
     window.isRadioOpen = state;
+    
     if (radioUI) {
         radioUI.style.display = state ? 'flex' : 'none';
-        if (state && typeof inputs !== 'undefined') {
-            inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
+        
+        if (state) {
+            if (typeof inputs !== 'undefined') {
+                inputs.up = false; inputs.down = false; inputs.left = false; inputs.right = false;
+            }
+            // Обновляем список контактов при открытии
+            if (currentRadioTab === 'personal') renderContactList();
+            
+            // Скролл лога вниз
+            if(radioLog) radioLog.scrollTop = radioLog.scrollHeight;
         }
-        if(radioLog) radioLog.scrollTop = radioLog.scrollHeight;
     }
 }
+
+window.switchRadioTab = function(tabName) {
+    currentRadioTab = tabName;
+    
+    // UI кнопок
+    document.querySelectorAll('.radio-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+    
+    // UI контента
+    document.querySelectorAll('.radio-view').forEach(view => view.classList.remove('active'));
+    document.getElementById(`view-${tabName}`).classList.add('active');
+
+    if (tabName === 'personal') {
+        renderContactList();
+        // Если чат был открыт, обновляем его, иначе показываем список
+        if (activeChatId) {
+            document.getElementById('personal-contacts').style.display = 'none';
+            document.getElementById('personal-chat').style.display = 'flex';
+        } else {
+            document.getElementById('personal-contacts').style.display = 'flex';
+            document.getElementById('personal-chat').style.display = 'none';
+        }
+    }
+}
+
+// --- ЛОГИКА ЛИЧНЫХ СООБЩЕНИЙ ---
+
+// API для получения сообщения от "игры"
+window.receivePrivateMessage = function(chatId, chatName, text) {
+    let chat = window.privateChats.find(c => c.id === chatId);
+    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    
+    if (!chat) {
+        chat = { id: chatId, name: chatName, unread: 0, messages: [] };
+        window.privateChats.unshift(chat); // Добавляем в начало
+    }
+    
+    chat.messages.push({ sender: 'in', text: text, time: time });
+    
+    // Если мы НЕ в этом чате прямо сейчас - увеличиваем счетчик
+    if (!window.isRadioOpen || currentRadioTab !== 'personal' || activeChatId !== chatId) {
+        chat.unread++;
+        
+        // Визуальная подсказка в HUD
+        if(typeof uiHint !== 'undefined') {
+            const oldHint = uiHint.innerHTML;
+            uiHint.innerHTML = `<span style="color:#00e676">СООБЩЕНИЕ ОТ: ${chatName}</span>`;
+            setTimeout(() => { if(uiHint.innerHTML.includes("СООБЩЕНИЕ")) uiHint.innerHTML = oldHint; }, 3000);
+        }
+    } else {
+        // Если чат открыт - сразу рендерим
+        renderChat(chatId);
+    }
+    
+    // Если открыт список контактов - обновляем
+    if (window.isRadioOpen && currentRadioTab === 'personal' && !activeChatId) {
+        renderContactList();
+    }
+}
+
+function renderContactList() {
+    const container = document.getElementById('personal-contacts');
+    container.innerHTML = '';
+    
+    if (window.privateChats.length === 0) {
+        container.innerHTML = '<div style="padding:20px; text-align:center; color:#444; font-size:12px;">НЕТ ДИАЛОГОВ</div>';
+        return;
+    }
+
+    window.privateChats.forEach(chat => {
+        const item = document.createElement('div');
+        item.className = 'contact-item';
+        if (chat.unread > 0) item.classList.add('has-unread');
+        
+        const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length-1].text : '';
+        const preview = lastMsg.length > 30 ? lastMsg.substring(0, 30) + '...' : lastMsg;
+        
+        item.innerHTML = `
+            <div>
+                <div class="contact-name">${chat.name}</div>
+                <div style="opacity:0.6; margin-top:2px;">${preview}</div>
+            </div>
+            ${chat.unread > 0 ? `<div class="unread-badge">${chat.unread}</div>` : ''}
+        `;
+        
+        item.onclick = () => openChat(chat.id);
+        container.appendChild(item);
+    });
+}
+
+function openChat(chatId) {
+    activeChatId = chatId;
+    
+    // Сбрасываем непрочитанные
+    const chat = window.privateChats.find(c => c.id === chatId);
+    if (chat) chat.unread = 0;
+    
+    document.getElementById('personal-contacts').style.display = 'none';
+    const chatView = document.getElementById('personal-chat');
+    chatView.style.display = 'flex';
+    
+    document.getElementById('chat-contact-name').innerText = chat ? chat.name : 'UNKNOWN';
+    
+    renderChat(chatId);
+}
+
+window.closeChat = function() {
+    activeChatId = null;
+    document.getElementById('personal-chat').style.display = 'none';
+    document.getElementById('personal-contacts').style.display = 'flex';
+    renderContactList(); // Обновить счетчики (сбросить badge)
+}
+
+function renderChat(chatId) {
+    const historyContainer = document.getElementById('chat-history');
+    historyContainer.innerHTML = '';
+    
+    const chat = window.privateChats.find(c => c.id === chatId);
+    if (!chat) return;
+    
+    chat.messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `chat-msg ${msg.sender === 'in' ? 'incoming' : 'outgoing'}`;
+        div.innerHTML = `
+            <span class="chat-msg-time">${msg.time}</span>
+            ${msg.text}
+        `;
+        historyContainer.appendChild(div);
+    });
+    
+    // Скролл вниз
+    historyContainer.scrollTop = historyContainer.scrollHeight;
+}
+
+// --- ЛОГИКА ОБЩЕГО ЭФИРА (СТАРАЯ) ---
 
 window.addToRadioLog = function(msg, color = "#ccc") {
     if (!radioLog) return;
@@ -143,70 +234,95 @@ window.requestDistressCall = function() {
     }, 1500);
 }
 
-// Функция проигрывания диалога с задержками
 function playRadioScenario(scenario, itemName) {
     let delay = 0;
-    
     scenario.forEach((line, index) => {
-        // Увеличиваем задержку для каждой следующей фразы
-        // Первая фраза сразу (0), вторая через 1.5с, третья через 3с и т.д.
         setTimeout(() => {
             let text = line.text;
             if (itemName) text = text.replace(/{ITEM}/g, itemName);
-            
             window.addToRadioLog(`${line.name}: "${text}"`, line.color);
-            
-            // Если это последнее сообщение в важном диалоге, даем подсказку
-            if (index === scenario.length - 1 && itemName) {
-                const hint = document.getElementById('ui-hint');
-                if(hint) {
-                    const old = hint.innerHTML;
-                    hint.innerHTML = "<span style='color:#00e5ff'>[R] СЛУХИ О РЫНКЕ ПОЛУЧЕНЫ</span>";
-                    setTimeout(() => { if(hint.innerHTML.includes("СЛУХИ")) hint.innerHTML = old; }, 3000);
-                }
-            }
         }, delay);
-        
-        delay += 1500 + Math.random() * 1000; // Пауза 1.5 - 2.5 сек между репликами
+        delay += 1500 + Math.random() * 1000;
     });
 }
 
-// --- ГЛАВНАЯ ФУНКЦИЯ (ВЫЗЫВАЕТСЯ ПОСЛЕ ПРЫЖКА) ---
 window.checkIncomingTransmission = function() {
-    // Безопасный поиск базы товаров (совместимость с разными версиями market.js)
     let items = null;
     if (typeof window.COMMODITY_DB !== 'undefined') items = window.COMMODITY_DB;
-    else if (typeof COMMODITY_DB !== 'undefined') items = COMMODITY_DB;
-    
-    if (!items) {
-        if (typeof window.marketState !== 'undefined') items = window.marketState.items;
-        else if (typeof marketState !== 'undefined') items = marketState.items;
-    }
+    else if (typeof window.marketState !== 'undefined') items = window.marketState.items;
 
     if (!items || items.length === 0) return;
 
-    // ШАНС 50%: Атмосфера (Flavor)
     if (Math.random() < 0.5) {
         const scenario = SCENARIOS_FLAVOR[Math.floor(Math.random() * SCENARIOS_FLAVOR.length)];
         playRadioScenario(scenario, null);
         return;
     }
 
-    // ШАНС 50%: Торговый Слух (Влияет на рынок следующего прыжка)
     const targetItem = items[Math.floor(Math.random() * items.length)];
     const isBullish = Math.random() > 0.5;
     
-    // Сохраняем влияние на рынок (будет учтено при следующей генерации цен)
     window.activeMarketRumor = {
         id: targetItem.id,
         multiplier: isBullish ? 3.0 : 0.2, 
         name: targetItem.name
     };
 
-    // Выбираем сценарий
     let scenarioList = isBullish ? SCENARIOS_BULLISH : SCENARIOS_BEARISH;
     const scenario = scenarioList[Math.floor(Math.random() * scenarioList.length)];
-
-    // Запускаем диалог
     playRadioScenario(scenario, targetItem.name);
+}
+
+// --- УТИЛИТА DRAG & DROP ---
+
+function makeDraggable(elmnt, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    
+    if (handle) {
+        handle.onmousedown = dragMouseDown;
+    } else {
+        elmnt.onmousedown = dragMouseDown;
+    }
+
+    function dragMouseDown(e) {
+        e = e || window.event;
+        e.preventDefault();
+        
+        // При первом клике снимаем CSS центрирование (transform: translate)
+        // и заменяем его на конкретные пиксели top/left
+        const style = window.getComputedStyle(elmnt);
+        if (style.transform !== 'none') {
+            const rect = elmnt.getBoundingClientRect();
+            elmnt.style.left = rect.left + 'px';
+            elmnt.style.top = rect.top + 'px';
+            elmnt.classList.add('manual-pos'); // Класс, отключающий transform в CSS
+        }
+        
+        // Получаем позицию курсора
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+    }
+
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        
+        // Вычисляем смещение
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        
+        // Устанавливаем новую позицию
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+    }
+
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+    }
 }
