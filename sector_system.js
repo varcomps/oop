@@ -108,4 +108,9 @@ function renderSystem(cx, cy, parallaxScale, objAlpha) {
         ctx.restore();
         ctx.globalAlpha = 1;
     }
+    // [НОВАЯ ФУНКЦИЯ] Сброс системы (вызывается при прыжке)
+    function resetStarSystem() {
+        starSystem.active = false;
+        starSystem.planets = [];
+}
 }

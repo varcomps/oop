@@ -16,7 +16,11 @@ function generateBlackHole() {
 }
 
 function updateBlackHolePhysics() {
+    // [ИСПРАВЛЕНИЕ] Если мы не в системе с черной дырой - игнорируем физику
+    if (currentSystemType !== 'black_hole') return;
+
     if (isWarping) return;
+    
     const dx = blackHole.x - mapShip.x;
     const dy = blackHole.y - mapShip.y;
     const distSq = dx*dx + dy*dy;

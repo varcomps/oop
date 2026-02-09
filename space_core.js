@@ -252,6 +252,8 @@ function updateWarpLogic() {
             else {
                 currentSystemType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
                 
+                // Генерация новых объектов происходит здесь, 
+                // но старые еще не очищены! Очистка будет ниже.
                 if (currentSystemType === 'station') {
                     station.x = Math.random() * canvas.width; station.y = Math.random() * canvas.height; station.visible = true;
                     generateStation();
@@ -297,6 +299,19 @@ function updateWarpLogic() {
                 return; 
             }
 
+            // === [ИСПРАВЛЕНИЕ] ОЧИСТКА ОБЪЕКТОВ ПРИ ВЫХОДЕ ИЗ ВАРПА ===
+            if (currentSystemType !== 'system' && typeof resetStarSystem === 'function') {
+                resetStarSystem(); // Выключаем звезду, если мы не в системе
+            }
+            if (currentSystemType !== 'black_hole') {
+                // Сбрасываем радиус дыры в ноль, чтобы она исчезла
+                if (typeof blackHole !== 'undefined') blackHole.radius = 0; 
+            }
+            if (currentSystemType !== 'station') {
+                if (typeof station !== 'undefined') station.visible = false;
+            }
+            // =========================================================
+
             warpFactor = 0; 
             isWarping = false; 
             isDocked = false; 
@@ -333,29 +348,20 @@ function updateWarpLogic() {
                 window.checkIncomingTransmission();
             }
 
-            // --- ИЗМЕНЕНИЕ: Не генерируем рынок заново, если он уже был загружен ---
             if (currentSystemType === 'station' && window.generateStationInventory) {
-                // Если рынок пуст (новая игра или прыжок в новую станцию), инициализируем его
                 if (window.marketState && (!window.marketState.items || window.marketState.items.length === 0)) {
                     if(window.initMarket) initMarket();
                     generateStationInventory();
                 }
-                // Если уже есть данные (например, загрузка), то оставляем как есть.
-                // Но если это ПРЫЖОК (мы только что прилетели), нам нужно сбросить старый рынок
-                // Мы можем проверить это по isGameLoaded из firebase_manager.js, но он там локальный.
-                // Лучше просто всегда генерировать при прыжке.
-                // А при загрузке сохранения setVisualState перезапишет это.
                 else {
                      generateStationInventory();
                 }
             }
-            // -----------------------------------------------------------------------
             
             if (mapShip.x < -1000 || mapShip.x > canvas.width + 1000 || mapShip.y < -1000 || mapShip.y > canvas.height + 1000) {
                  mapShip.x = canvas.width/2; mapShip.y = canvas.height/2; mapShip.vx = 0; mapShip.vy = 0;
             }
             
-            // Сохраняемся после прыжка (автосейв новой системы)
             if (window.saveGameData) window.saveGameData();
         }
     }
