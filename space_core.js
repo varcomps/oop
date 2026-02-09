@@ -238,7 +238,8 @@ function updateWarpLogic() {
         warpState.timer++; 
         
         if (warpState.timer === 20) { 
-            currentSystemType = null; 
+            // Временно скрываем тип системы для анимации
+            // Но НЕ сбрасываем координаты станции здесь
             if (!autoJumpState.active) jumpBtn.innerHTML = "В ПУТИ..."; 
         }
         
@@ -250,25 +251,34 @@ function updateWarpLogic() {
                 currentSystemType = null; 
             } 
             else {
-                currentSystemType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
+                // Устанавливаем целевой тип системы
+                const targetType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
                 
-                // Генерация новых объектов происходит здесь, 
-                // но старые еще не очищены! Очистка будет ниже.
-                if (currentSystemType === 'station') {
-                    station.x = Math.random() * canvas.width; station.y = Math.random() * canvas.height; station.visible = true;
-                    generateStation();
-                } else if (currentSystemType === 'system') {
+                // Если мы прыгаем в станцию
+                if (targetType === 'station') {
+                    // Генерируем НОВУЮ станцию, только если мы прибыли из варпа
+                    // (Логика варпа подразумевает перемещение, так что генерируем всегда новую точку)
+                    currentSystemType = 'station';
+                    station.x = Math.random() * canvas.width; 
+                    station.y = Math.random() * canvas.height; 
+                    station.visible = true;
+                    generateStation(); // Генерирует структуру (ангары и т.д.)
+                } 
+                else if (targetType === 'system') {
+                    currentSystemType = 'system';
                     generateRealRandomSystem(); 
-                } else if (currentSystemType === 'black_hole') {
+                } else if (targetType === 'black_hole') {
+                    currentSystemType = 'black_hole';
                     generateBlackHole();
                 } else {
+                    currentSystemType = 'system';
                     generateRealRandomSystem();
                 }
             }
             
             if (!autoJumpState.active) jumpBtn.innerHTML = "ПРИБЫТИЕ..."; 
         }
-    } 
+    }
     else if (warpState.phase === WARP_EXIT) {
         warpFactor *= 0.90; 
         bgState.progress = Math.min(1.0, bgState.progress + 0.015);

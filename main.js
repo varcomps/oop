@@ -69,45 +69,52 @@ function performStateSwitch() {
         } 
     }
 
-    // ЛОГИКА ТЕЛЕПОРТАЦИИ
     const airlock = installedModules.find(m => m.type === 'airlock');
 
-    // --- 1. ВЫХОД ИЗ КОРАБЛЯ (На станцию/в космос) ---
-    if (currentState === STATE_HANGAR) {
+    // --- ЛОГИКА ВХОДА В АНГАР (СТЫКОВКА С КАРТЫ) ---
+    if (currentState === STATE_HANGAR && oldState === STATE_MAP) {
+        // Если выбран конкретный ангар при стыковке
+        if (window.targetHangar) {
+            const h = window.targetHangar;
+            // Центрируем корабль в ангаре
+            // x + половина ширины ангара - примерно половина ширины корабля (чтобы было красиво)
+            const centerX = (h.x + h.w / 2) * TILE_SIZE;
+            const centerY = (h.y + h.h / 2) * TILE_SIZE;
+            
+            player.x = centerX - (1 * TILE_SIZE); // Смещение, чтобы корабль был по центру визуально
+            player.y = centerY - (1 * TILE_SIZE);
+            
+            // Сбрасываем инерцию
+            if (typeof mapShip !== 'undefined') { mapShip.vx = 0; mapShip.vy = 0; }
+        } 
+        else {
+            // Фолбек на 0,0 если ангар не выбран
+            player.x = 10 * TILE_SIZE; 
+            player.y = 8 * TILE_SIZE;
+        }
+    }
+
+    // --- 1. ВЫХОД ИЗ КОРАБЛЯ ПЕШКОМ (На станцию) ---
+    else if (currentState === STATE_HANGAR && oldState === STATE_SHIP) {
         if (airlock) { 
              const isVertical = (airlock.w === 1 && airlock.h === 2);
              let spawnX = 0;
              let spawnY = 0;
 
              if (isVertical) {
-                 // Вертикальный шлюз (1x2):
                  const floorLeft = getFloor(airlock.x - 1, airlock.y) || getFloor(airlock.x - 1, airlock.y + 1);
-                 
-                 if (floorLeft) {
-                     spawnX = airlock.x + 1; // Выход вправо
-                 } else {
-                     spawnX = airlock.x - 1; // Выход влево
-                 }
-
+                 if (floorLeft) spawnX = airlock.x + 1; else spawnX = airlock.x - 1;
                  player.x = (spawnX + 0.5) * TILE_SIZE;      
                  player.y = (airlock.y + 1.0) * TILE_SIZE;   
-             } 
-             else {
-                 // Горизонтальный шлюз (2x1):
+             } else {
                  const floorTop = getFloor(airlock.x, airlock.y - 1) || getFloor(airlock.x + 1, airlock.y - 1);
-                 
-                 if (floorTop) {
-                     spawnY = airlock.y + 1; // Выход вниз
-                 } else {
-                     spawnY = airlock.y - 1; // Выход вверх
-                 }
-
+                 if (floorTop) spawnY = airlock.y + 1; else spawnY = airlock.y - 1;
                  player.x = (airlock.x + 1.0) * TILE_SIZE;   
                  player.y = (spawnY + 0.5) * TILE_SIZE;      
              }
         }
     } 
-    // --- 2. ВХОД В КОРАБЛЬ ---
+    // --- 2. ВХОД В КОРАБЛЬ (С платформы станции) ---
     else if (currentState === STATE_SHIP) {
         if (oldState === STATE_HANGAR) {
              if (window.teleportPlayerToInterior) window.teleportPlayerToInterior();
