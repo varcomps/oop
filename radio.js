@@ -21,101 +21,37 @@ let activeChatListeners = {};
 
 // --- ГЕНЕРАТОР ПРОЦЕДУРНЫХ ДИАЛОГОВ (PVE) ---
 
-const PVE_ACTORS = {
-    TRADER: { color: "#ef9a9a", names: ["Торговец", "Фрейтер", "Дальнобой", "Караван-7"] },
-    PIRATE: { color: "#ff5252", names: ["Череп", "Рейдер", "Корсар", "Неизвестный борт"] },
-    POLICE: { color: "#4fc3f7", names: ["Патруль", "Секторальный контроль", "Инспектор", "Гвардия"] },
-    MINER:  { color: "#ffa726", names: ["Бурильщик", "Шахтер-Прайм", "Геолог", "Добытчик"] },
-    SYSTEM: { color: "#b39ddb", names: ["СИСТЕМА", "ИИ Станции", "Аварийный маяк"] },
-    TECH:   { color: "#a1887f", names: ["Механик", "Док-сервис", "Инженер"] }
-};
+
 
 const ACTIONS = ["сброс груза", "атаку", "сканирование", "стыковку", "ремонт", "добычу"];
 
 // Шаблоны диалогов (Массив объектов-сценариев)
 // УБРАНЫ упоминания секторов. ДОБАВЛЕНЫ экстремальные рыночные события.
-const PROCEDURAL_TEMPLATES = [
-    // Сценарий 1: Пиратское нападение (Без локации)
-    {
-        type: "combat",
-        steps: [
-            { role: "PIRATE", text: "Глуши движки! Мы видим твою сигнатуру." },
-            { role: "TRADER", text: "Mayday! Меня атакуют по текущим координатам! Требуется помощь!" },
-            { role: "PIRATE", text: "Сбрасывай {ITEM} или будешь уничтожен." },
-            { role: "POLICE", text: "Всем бортам в квадрате, зафиксирована агрессия. Высылаем перехватчики." },
-            { role: "PIRATE", text: "Черт, легавые! Уходим в гипер!" }
-        ]
-    },
-    // Сценарий 2: РЕЗКИЙ РОСТ (Bullish - Spike)
-    {
-        type: "bullish",
-        multiplier: 3.5, // Цена вырастет в 3.5 раза
-        steps: [
-            { role: "TRADER", text: "Парни, вы слышали новости? На главной станции дефицит." },
-            { role: "TRADER", text: "Они скупают {ITEM} по безумным ценам! Я серьезно!" },
-            { role: "MINER", text: "Подтверждаю. Производство встало. Готовы платить тройную цену." },
-            { role: "SYSTEM", text: "РЫНОК: Прогнозируется экстремальный РОСТ цены на: {ITEM}." }
-        ]
-    },
-    // Сценарий 3: ОБВАЛ ЦЕНЫ (Bearish - Crash)
-    {
-        type: "bearish",
-        multiplier: 0.2, // Цена упадет до 20%
-        steps: [
-            { role: "PIRATE", text: "Ха! Мы только что выпотрошили корпоративный конвой." },
-            { role: "PIRATE", text: "Сбрасываем тонны {ITEM} на черный рынок. Забирайте даром." },
-            { role: "TRADER", text: "О нет... Это обрушит биржу. Сливайте запасы, пока не поздно!" },
-            { role: "SYSTEM", text: "РЫНОК: Ожидается перенасыщение. ОБВАЛ цены на: {ITEM}." }
-        ]
-    },
-    // Сценарий 4: Полицейская проверка (Нейтральный)
-    {
-        type: "neutral",
-        steps: [
-            { role: "POLICE", text: "Неизвестный борт, заглушите двигатели для сканирования." },
-            { role: "TRADER", text: "Офицер, я пустой. Лечу транзитом через этот квадрат." },
-            { role: "SYSTEM", text: "...СКАНИРОВАНИЕ ЗАВЕРШЕНО..." },
-            { role: "POLICE", text: "Чисто. Можете продолжать движение. Конец связи." }
-        ]
-    },
-    // Сценарий 5: Техническая проблема (Флейвор)
-    {
-        type: "flavor",
-        steps: [
-            { role: "TRADER", text: "У меня отказ навигации! Кто-нибудь видит меня на радарах?" },
-            { role: "TECH", text: "Вижу вас. У вас утечка топлива. Не включайте варп-двигатель." },
-            { role: "TRADER", text: "Понял. Дрейфую к ближайшему доку." },
-            { role: "SYSTEM", text: "ВНИМАНИЕ: Опасность столкновения в локальном пространстве." }
-        ]
-    }
-];
+
 
 // 2. Исправленная генерация (разделяем имя для текста и ID для рынка)
+// В radio.js функция теперь использует данные из dialogues_db.js
 function generateProceduralConversation(itemObj) {
     if (!itemObj) return null;
 
+    // Выбираем шаблон из ВНЕШНЕЙ базы PROCEDURAL_TEMPLATES
     const template = PROCEDURAL_TEMPLATES[Math.floor(Math.random() * PROCEDURAL_TEMPLATES.length)];
-    
-    // ВАЖНО: берем именно свойство .name для текста
     const itemName = itemObj.name || "Груз";
     
-    // ЛОГИКА РЫНКА (используем .id)
+    // ЛОГИКА РЫНКА
     if (itemObj.id && (template.type === 'bullish' || template.type === 'bearish')) {
         window.activeMarketRumor = { 
             id: itemObj.id, 
             multiplier: template.multiplier 
         };
-        console.log(`[RADIO] Событие для ${itemName}: x${template.multiplier}`);
+        console.log(`[EVENT] ${template.id}: ${itemName} x${template.multiplier}`);
     }
 
-    // Создаем строки диалога
+    // Сборка текста (используем PVE_ACTORS из dialogues_db.js)
     return template.steps.map(step => {
         const actorData = PVE_ACTORS[step.role];
         const name = actorData.names[Math.floor(Math.random() * actorData.names.length)];
-        
-        // Заменяем заглушку {ITEM} на строковое имя товара
         let text = step.text.replace(/{ITEM}/g, itemName);
-        
         return { name: name, color: actorData.color, text: text };
     });
 }
@@ -781,11 +717,8 @@ function playProceduralDialogue(conversation) {
     });
 }
 
-// Исправленная функция в radio.js
 window.checkIncomingTransmission = function() {
     let items = [];
-
-    // Проверяем живой рынок, если его нет — базу данных
     if (window.marketState && window.marketState.items && window.marketState.items.length > 0) {
         items = window.marketState.items;
     } else if (typeof COMMODITY_DB !== 'undefined') {
@@ -794,17 +727,49 @@ window.checkIncomingTransmission = function() {
 
     if (items.length === 0) return;
 
-    // Выбираем случайный объект товара
-    const targetItemObj = items[Math.floor(Math.random() * items.length)];
+    // --- АЛГОРИТМ ВЗВЕШЕННОГО ВЫБОРА ДИАЛОГА ---
+    const totalWeight = PROCEDURAL_TEMPLATES.reduce((sum, t) => sum + (t.weight || 10), 0);
+    let random = Math.random() * totalWeight;
+    let selectedTemplate = PROCEDURAL_TEMPLATES[0];
 
-    // Генерируем диалог, передавая ВЕСЬ объект
-    const conversation = generateProceduralConversation(targetItemObj);
+    for (let i = 0; i < PROCEDURAL_TEMPLATES.length; i++) {
+        const t = PROCEDURAL_TEMPLATES[i];
+        if (random < (t.weight || 10)) {
+            selectedTemplate = t;
+            break;
+        }
+        random -= (t.weight || 10);
+    }
+    // ------------------------------------------
+
+    const targetItemObj = items[Math.floor(Math.random() * items.length)];
+    
+    // Передаем выбранный шаблон в генератор
+    const conversation = generateProceduralFromTemplate(targetItemObj, selectedTemplate);
     
     if (conversation) {
         playProceduralDialogue(conversation);
     }
 }
+function generateProceduralFromTemplate(itemObj, template) {
+    const itemName = itemObj.name || "Груз";
+    
+    // ЛОГИКА РЫНКА
+    if (itemObj.id && (template.type === 'bullish' || template.type === 'bearish')) {
+        window.activeMarketRumor = { 
+            id: itemObj.id, 
+            multiplier: template.multiplier 
+        };
+        console.log(`[EVENT] ${template.id}: x${template.multiplier} rarity applied.`);
+    }
 
+    return template.steps.map(step => {
+        const actorData = PVE_ACTORS[step.role];
+        const name = actorData.names[Math.floor(Math.random() * actorData.names.length)];
+        let text = step.text.replace(/{ITEM}/g, itemName);
+        return { name: name, color: actorData.color, text: text };
+    });
+}
 
 // ==========================================
 // 7. DRAG & DROP UTILITY

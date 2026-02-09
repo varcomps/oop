@@ -11,56 +11,56 @@ const marketGhost = document.getElementById('marketGhost');
 
 // --- КОНФИГУРАЦИЯ ТОВАРОВ ---
 const COMMODITY_DB = [
-    { id: 'c01', name: 'Iron Ore',      base: 0.0001, min: 0.00005, max: 0.0005, step: 0.00005 },
-    { id: 'c02', name: 'Carbon',        base: 0.0001, min: 0.00005, max: 0.0004, step: 0.00005 },
-    { id: 'c03', name: 'Ice Water',     base: 0.0002, min: 0.0001,  max: 0.0006, step: 0.00005 },
-    { id: 'c04', name: 'Hydrogen',      base: 0.0002, min: 0.0001,  max: 0.0008, step: 0.00005 },
-    { id: 'c05', name: 'Silica Sand',   base: 0.0001, min: 0.00005, max: 0.0005, step: 0.00005 },
-    { id: 'c06', name: 'Copper Ore',    base: 0.0003, min: 0.0001,  max: 0.0009, step: 0.0001 },
-    { id: 'c07', name: 'Aluminium',     base: 0.0003, min: 0.0002,  max: 0.0010, step: 0.0001 },
-    { id: 'c08', name: 'Titanium Ore',  base: 0.0005, min: 0.0003,  max: 0.0015, step: 0.0001 },
-    { id: 'c09', name: 'Biomass',       base: 0.0004, min: 0.0002,  max: 0.0012, step: 0.0001 },
-    { id: 'c10', name: 'Scrap Metal',   base: 0.0001, min: 0.00001, max: 0.0003, step: 0.00002 },
-    { id: 'c11', name: 'Steel Plates',  base: 0.0010, min: 0.0005, max: 0.0020, step: 0.0002 },
-    { id: 'c12', name: 'Glass',         base: 0.0012, min: 0.0008, max: 0.0025, step: 0.0002 },
-    { id: 'c13', name: 'Plastics',      base: 0.0015, min: 0.0010, max: 0.0030, step: 0.0003 },
-    { id: 'c14', name: 'Copper Wire',   base: 0.0020, min: 0.0012, max: 0.0040, step: 0.0003 },
-    { id: 'c15', name: 'Ceramics',      base: 0.0018, min: 0.0010, max: 0.0035, step: 0.0003 },
-    { id: 'c16', name: 'Nano-Fibers',   base: 0.0030, min: 0.0020, max: 0.0060, step: 0.0005 },
-    { id: 'c17', name: 'Polymer Res',   base: 0.0025, min: 0.0015, max: 0.0050, step: 0.0004 },
-    { id: 'c18', name: 'Fuel Rods',     base: 0.0040, min: 0.0025, max: 0.0080, step: 0.0005 },
-    { id: 'c19', name: 'Circuitry',     base: 0.0035, min: 0.0020, max: 0.0070, step: 0.0005 },
-    { id: 'c20', name: 'Optics',        base: 0.0045, min: 0.0030, max: 0.0090, step: 0.0006 },
-    { id: 'c21', name: 'Microchips',    base: 0.0050, min: 0.0030, max: 0.0100, step: 0.0010 }, 
-    { id: 'c22', name: 'Solar Cells',   base: 0.0060, min: 0.0040, max: 0.0120, step: 0.0010 },
-    { id: 'c23', name: 'Batteries',     base: 0.0055, min: 0.0035, max: 0.0110, step: 0.0010 },
-    { id: 'c24', name: 'Sensor Arrays', base: 0.0080, min: 0.0050, max: 0.0150, step: 0.0015 },
-    { id: 'c25', name: 'Drones',        base: 0.0100, min: 0.0060, max: 0.0200, step: 0.0020 },
-    { id: 'c26', name: 'Med-Gel',       base: 0.0090, min: 0.0050, max: 0.0180, step: 0.0015 },
-    { id: 'c27', name: 'Engine Parts',  base: 0.0120, min: 0.0080, max: 0.0250, step: 0.0020 },
-    { id: 'c28', name: 'Shield Gen',    base: 0.0150, min: 0.0100, max: 0.0300, step: 0.0025 },
-    { id: 'c29', name: 'Nav-Comps',     base: 0.0140, min: 0.0090, max: 0.0280, step: 0.0020 },
-    { id: 'c30', name: 'Reactors',      base: 0.0180, min: 0.0120, max: 0.0350, step: 0.0030 },
-    { id: 'c31', name: 'Synth-Meat',    base: 0.0200, min: 0.0100, max: 0.0400, step: 0.0030 },
-    { id: 'c32', name: 'Pure Water',    base: 0.0220, min: 0.0150, max: 0.0450, step: 0.0030 },
-    { id: 'c33', name: 'Liquor',        base: 0.0250, min: 0.0150, max: 0.0500, step: 0.0040 },
-    { id: 'c34', name: 'Narcotics',     base: 0.0300, min: 0.0200, max: 0.0600, step: 0.0050 },
-    { id: 'c35', name: 'Artwork',       base: 0.0350, min: 0.0200, max: 0.0800, step: 0.0050 },
-    { id: 'c36', name: 'Jewelry',       base: 0.0400, min: 0.0250, max: 0.0900, step: 0.0060 },
-    { id: 'c37', name: 'Exotic Pets',   base: 0.0450, min: 0.0300, max: 0.1000, step: 0.0070 },
-    { id: 'c38', name: 'Ancient Relics',base: 0.0480, min: 0.0300, max: 0.1200, step: 0.0080 },
-    { id: 'c39', name: 'VR Suites',     base: 0.0280, min: 0.0180, max: 0.0550, step: 0.0040 },
-    { id: 'c40', name: 'Terra-Seeds',   base: 0.0380, min: 0.0250, max: 0.0750, step: 0.0050 },
-    { id: 'c41', name: 'Dark Matter',   base: 0.0500, min: 0.0300, max: 0.1000, step: 0.0080 },
-    { id: 'c42', name: 'Warp Plasma',   base: 0.0600, min: 0.0400, max: 0.1200, step: 0.0090 },
-    { id: 'c43', name: 'Neutronium',    base: 0.0700, min: 0.0500, max: 0.1400, step: 0.0100 },
-    { id: 'c44', name: 'AI Cores',      base: 0.0800, min: 0.0500, max: 0.1500, step: 0.0120 },
-    { id: 'c45', name: 'Zero-G Alloys', base: 0.0550, min: 0.0350, max: 0.1100, step: 0.0080 },
-    { id: 'c46', name: 'Grav-Drives',   base: 0.0900, min: 0.0600, max: 0.1800, step: 0.0150 },
-    { id: 'c47', name: 'Void Crystals', base: 0.0850, min: 0.0550, max: 0.1600, step: 0.0120 },
-    { id: 'c48', name: 'Protomolecule', base: 0.0950, min: 0.0700, max: 0.2000, step: 0.0150 },
-    { id: 'c49', name: 'Singularity',   base: 0.1000, min: 0.0800, max: 0.2500, step: 0.0200 },
-    { id: 'c50', name: 'Star Maps',     base: 0.0650, min: 0.0400, max: 0.1300, step: 0.0100 }
+    { id: 'c01', name: 'Iron Ore',      base: 0.0001, min: 0.00005, max: 0.0005, step: 0.00005, w: 1, h: 1 },
+    { id: 'c02', name: 'Carbon',        base: 0.0001, min: 0.00005, max: 0.0004, step: 0.00005, w: 1, h: 1 },
+    { id: 'c03', name: 'Ice Water',     base: 0.0002, min: 0.0001,  max: 0.0006, step: 0.00005, w: 1, h: 1 },
+    { id: 'c04', name: 'Hydrogen',      base: 0.0002, min: 0.0001,  max: 0.0008, step: 0.00005, w: 1, h: 1 },
+    { id: 'c05', name: 'Silica Sand',   base: 0.0001, min: 0.00005, max: 0.0005, step: 0.00005, w: 1, h: 1 },
+    { id: 'c06', name: 'Copper Ore',    base: 0.0003, min: 0.0001,  max: 0.0009, step: 0.0001,  w: 1, h: 1 },
+    { id: 'c07', name: 'Aluminium',     base: 0.0003, min: 0.0002,  max: 0.0010, step: 0.0001,  w: 1, h: 1 },
+    { id: 'c08', name: 'Titanium Ore',  base: 0.0005, min: 0.0003,  max: 0.0015, step: 0.0001,  w: 1, h: 1 },
+    { id: 'c09', name: 'Biomass',       base: 0.0004, min: 0.0002,  max: 0.0120, step: 0.0001,  w: 1, h: 1 },
+    { id: 'c10', name: 'Scrap Metal',   base: 0.0001, min: 0.00001, max: 0.0003, step: 0.00002, w: 1, h: 1 },
+    { id: 'c11', name: 'Steel Plates',  base: 0.0010, min: 0.0005, max: 0.0020, step: 0.0002, w: 2, h: 1 },
+    { id: 'c12', name: 'Glass',         base: 0.0012, min: 0.0008, max: 0.0025, step: 0.0002, w: 2, h: 1 },
+    { id: 'c13', name: 'Plastics',      base: 0.0015, min: 0.0010, max: 0.0030, step: 0.0003, w: 2, h: 1 },
+    { id: 'c14', name: 'Copper Wire',   base: 0.0020, min: 0.0012, max: 0.0040, step: 0.0003, w: 2, h: 1 },
+    { id: 'c15', name: 'Ceramics',      base: 0.0018, min: 0.0010, max: 0.0035, step: 0.0003, w: 2, h: 2 },
+    { id: 'c16', name: 'Nano-Fibers',   base: 0.0030, min: 0.0020, max: 0.0060, step: 0.0005, w: 2, h: 2 },
+    { id: 'c17', name: 'Polymer Res',   base: 0.0025, min: 0.0150, max: 0.0050, step: 0.0004, w: 2, h: 2 },
+    { id: 'c18', name: 'Fuel Rods',     base: 0.0040, min: 0.0250, max: 0.0080, step: 0.0005, w: 2, h: 1 },
+    { id: 'c19', name: 'Circuitry',     base: 0.0035, min: 0.0020, max: 0.0070, step: 0.0005, w: 2, h: 2 },
+    { id: 'c20', name: 'Optics',        base: 0.0045, min: 0.0030, max: 0.0090, step: 0.0006, w: 2, h: 1 },
+    { id: 'c21', name: 'Microchips',    base: 0.0050, min: 0.0030, max: 0.0100, step: 0.0010, w: 1, h: 1 }, 
+    { id: 'c22', name: 'Solar Cells',   base: 0.0060, min: 0.0400, max: 0.0120, step: 0.0010, w: 3, h: 2 },
+    { id: 'c23', name: 'Batteries',     base: 0.0055, min: 0.0350, max: 0.0110, step: 0.0010, w: 2, h: 2 },
+    { id: 'c24', name: 'Sensor Arrays', base: 0.0080, min: 0.0500, max: 0.1500, step: 0.0015, w: 3, h: 2 },
+    { id: 'c25', name: 'Drones',        base: 0.0100, min: 0.0060, max: 0.0200, step: 0.0020, w: 2, h: 2 },
+    { id: 'c26', name: 'Med-Gel',       base: 0.0090, min: 0.0500, max: 0.1800, step: 0.0015, w: 1, h: 2 },
+    { id: 'c27', name: 'Engine Parts',  base: 0.0120, min: 0.0800, max: 0.0250, step: 0.0020, w: 4, h: 2 },
+    { id: 'c28', name: 'Shield Gen',    base: 0.0150, min: 0.1000, max: 0.3000, step: 0.0025, w: 3, h: 2 },
+    { id: 'c29', name: 'Nav-Comps',     base: 0.0140, min: 0.0900, max: 0.2800, step: 0.0020, w: 2, h: 2 },
+    { id: 'c30', name: 'Reactors',      base: 0.0180, min: 0.1200, max: 0.3500, step: 0.0030, w: 4, h: 2 },
+    { id: 'c31', name: 'Synth-Meat',    base: 0.0200, min: 0.1000, max: 0.4000, step: 0.0030, w: 2, h: 1 },
+    { id: 'c32', name: 'Pure Water',    base: 0.0220, min: 0.1500, max: 0.4500, step: 0.0030, w: 2, h: 1 },
+    { id: 'c33', name: 'Liquor',        base: 0.0250, min: 0.1500, max: 0.5000, step: 0.0040, w: 1, h: 1 },
+    { id: 'c34', name: 'Narcotics',     base: 0.0300, min: 0.2000, max: 0.6000, step: 0.0050, w: 1, h: 1 },
+    { id: 'c35', name: 'Artwork',       base: 0.0350, min: 0.2000, max: 0.0800, step: 0.0050, w: 2, h: 2 },
+    { id: 'c36', name: 'Jewelry',       base: 0.0400, min: 0.2500, max: 0.0900, step: 0.0060, w: 1, h: 1 },
+    { id: 'c37', name: 'Exotic Pets',   base: 0.0450, min: 0.3000, max: 0.1000, step: 0.0070, w: 2, h: 2 },
+    { id: 'c38', name: 'Ancient Relics',base: 0.4800, min: 0.3000, max: 0.1200, step: 0.0080, w: 2, h: 2 },
+    { id: 'c39', name: 'VR Suites',     base: 0.0280, min: 0.1800, max: 0.0550, step: 0.0040, w: 3, h: 2 },
+    { id: 'c40', name: 'Terra-Seeds',   base: 0.0380, min: 0.2500, max: 0.0750, step: 0.0050, w: 1, h: 1 },
+    { id: 'c41', name: 'Dark Matter',   base: 0.0500, min: 0.3000, max: 0.1000, step: 0.0080, w: 3, h: 2 },
+    { id: 'c42', name: 'Warp Plasma',   base: 0.0600, min: 0.4000, max: 0.1200, step: 0.0090, w: 4, h: 2 },
+    { id: 'c43', name: 'Neutronium',    base: 0.0700, min: 0.5000, max: 0.1400, step: 0.0100, w: 3, h: 2 },
+    { id: 'c44', name: 'AI Cores',      base: 0.0800, min: 0.5000, max: 0.1500, step: 0.0120, w: 2, h: 2 },
+    { id: 'c45', name: 'Zero-G Alloys', base: 0.0550, min: 0.3500, max: 0.1100, step: 0.0080, w: 3, h: 2 },
+    { id: 'c46', name: 'Grav-Drives',   base: 0.0900, min: 0.6000, max: 0.1800, step: 0.0150, w: 5, h: 2 },
+    { id: 'c47', name: 'Void Crystals', base: 0.0850, min: 0.5500, max: 0.1600, step: 0.0120, w: 2, h: 2 },
+    { id: 'c48', name: 'Protomolecule', base: 0.0950, min: 0.7000, max: 0.2000, step: 0.0150, w: 3, h: 2 },
+    { id: 'c49', name: 'Singularity',   base: 0.1000, min: 0.8000, max: 0.2500, step: 0.0200, w: 5, h: 2 },
+    { id: 'c50', name: 'Star Maps',     base: 0.0650, min: 0.4000, max: 0.1300, step: 0.0100, w: 1, h: 1 }
 ];
 
 let marketState = {
@@ -261,7 +261,8 @@ function updateTradePanel(item) {
 
     let html = `<div class="tp-header">${item.name}</div>`;
     html += `<div class="tp-info">PRICE: <span style="color:#ffd700">${item.price.toFixed(5)} SC</span></div>`;
-    html += `<div class="tp-info">SIZE: 2x2 CRATE</div>`;
+    // ДИНАМИЧЕСКИЙ РАЗМЕР:
+    html += `<div class="tp-info">SIZE: ${item.w}x${item.h} CRATE</div>`; 
     html += `<div class="tp-info">OWNED: ${playerAmount}</div>`;
     html += `<div class="tp-actions">`;
     if (canBuy) html += `<button class="trade-btn btn-buy" onclick="tradeTransaction('${item.id}', 'buy')">BUY</button>`;
@@ -385,12 +386,13 @@ function tradeTransaction(id, action) {
 
     if (action === 'buy') {
         if (player.credits >= item.price) {
-            if (tryAutoBuyCargo(id, item.name, item.price)) {
+            // ПЕРЕДАЕМ РАЗМЕРЫ ТОВАРА:
+            if (tryAutoBuyCargo(id, item.name, item.price, item.w, item.h)) {
                 setTradeStatus(`BOUGHT ${item.name}`, "#00e676");
                 updateTradePanel(item);
                 window.renderMarketGrid(); 
             } else {
-                setTradeStatus("NOT ENOUGH SPACE (NEED 2x2)", "#ff1744");
+                setTradeStatus(`NOT ENOUGH SPACE (${item.w}x${item.h})`, "#ff1744");
             }
         } else {
             setTradeStatus("INSUFFICIENT FUNDS", "#ff1744");
@@ -413,17 +415,21 @@ function tradeTransaction(id, action) {
     }
 }
 
-function tryAutoBuyCargo(id, name, cost) {
+function tryAutoBuyCargo(id, name, cost, w, h) {
     if (!window.isOccupied) return false;
-    for(let y=0; y<9; y++) { 
-        for(let x=0; x<9; x++) { 
-            if (!window.isOccupied(x, y, 2, 2)) {
+    
+    // Циклы учитывают размер предмета, чтобы он не вылез за край сетки (10x10)
+    for(let y = 0; y <= 10 - h; y++) { 
+        for(let x = 0; x <= 10 - w; x++) { 
+            if (!window.isOccupied(x, y, w, h)) {
                 player.credits -= cost;
                 updateCurrencyUI();
                 window.placedStorageItems.push({ 
                     x: x, y: y, 
-                    type: 'cargo', w: 2, h: 2, 
-                    commodityId: id, name: name
+                    type: 'cargo', 
+                    w: w, h: h, // СОХРАНЯЕМ РАЗМЕР В ОБЪЕКТ
+                    commodityId: id, 
+                    name: name
                 });
                 if(window.renderStorageGrid) window.renderStorageGrid();
                 return true;
