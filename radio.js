@@ -764,15 +764,28 @@ function showRadioChoices(choices, lastActor) {
         btn.innerText = choice.text;
         
         btn.onclick = () => {
-            // Деактивируем все кнопки в этом блоке после клика
+            // Деактивируем все кнопки в блоке
             container.querySelectorAll('button').forEach(b => b.disabled = true);
             
             // 1. Выводим ответ игрока
             window.addToRadioLog(`ВЫ: "${choice.text}"`, "#fff");
             
-            // 2. Через паузу NPC отвечает на этот выбор
+            // 2. Через паузу NPC отвечает
             setTimeout(() => {
                 window.addToRadioLog(`${lastActor.name}: "${choice.reaction}"`, lastActor.color);
+                
+                // НОВОЕ: Если есть продолжение (followUp), проигрываем его
+                if (choice.followUp) {
+                    let followDelay = 1500;
+                    choice.followUp.forEach(fStep => {
+                        setTimeout(() => {
+                            const actorData = PVE_ACTORS[fStep.role];
+                            const name = actorData.names[Math.floor(Math.random() * actorData.names.length)];
+                            window.addToRadioLog(`${name}: "${fStep.text.replace(/{ITEM}/g, 'товар')}"`, actorData.color);
+                        }, followDelay);
+                        followDelay += 1000 + (fStep.text.length * 20);
+                    });
+                }
             }, 1200);
         };
         
