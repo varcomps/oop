@@ -90,30 +90,31 @@ const PROCEDURAL_TEMPLATES = [
     }
 ];
 
-function generateProceduralConversation(itemName, itemObj) {
+// 2. Исправленная генерация (разделяем имя для текста и ID для рынка)
+function generateProceduralConversation(itemObj) {
+    if (!itemObj) return null;
+
     const template = PROCEDURAL_TEMPLATES[Math.floor(Math.random() * PROCEDURAL_TEMPLATES.length)];
-    const item = itemName || "Груз";
     
-    // ЛОГИКА РЫНКА
-    if (itemObj) {
-        if (template.type === 'bullish') {
-            // Устанавливаем слух на повышение
-            window.activeMarketRumor = { id: itemObj.id, multiplier: template.multiplier };
-            console.log(`[RADIO] Generated BULLISH rumor for ${item} (x${template.multiplier})`);
-        } 
-        else if (template.type === 'bearish') {
-            // Устанавливаем слух на понижение
-            window.activeMarketRumor = { id: itemObj.id, multiplier: template.multiplier };
-            console.log(`[RADIO] Generated BEARISH rumor for ${item} (x${template.multiplier})`);
-        }
+    // ВАЖНО: берем именно свойство .name для текста
+    const itemName = itemObj.name || "Груз";
+    
+    // ЛОГИКА РЫНКА (используем .id)
+    if (itemObj.id && (template.type === 'bullish' || template.type === 'bearish')) {
+        window.activeMarketRumor = { 
+            id: itemObj.id, 
+            multiplier: template.multiplier 
+        };
+        console.log(`[RADIO] Событие для ${itemName}: x${template.multiplier}`);
     }
 
+    // Создаем строки диалога
     return template.steps.map(step => {
         const actorData = PVE_ACTORS[step.role];
         const name = actorData.names[Math.floor(Math.random() * actorData.names.length)];
         
-        // Больше нет {SECTOR}, заменяем только {ITEM}
-        let text = step.text.replace(/{ITEM}/g, item);
+        // Заменяем заглушку {ITEM} на строковое имя товара
+        let text = step.text.replace(/{ITEM}/g, itemName);
         
         return { name: name, color: actorData.color, text: text };
     });
@@ -780,21 +781,28 @@ function playProceduralDialogue(conversation) {
     });
 }
 
+// Исправленная функция в radio.js
 window.checkIncomingTransmission = function() {
-    let items = null;
-    let targetItemName = "Энергоблоки";
-    let targetItemObj = null;
+    let items = [];
 
-    if (typeof window.COMMODITY_DB !== 'undefined') items = window.COMMODITY_DB;
-    else if (typeof window.marketState !== 'undefined') items = window.marketState.items;
-
-    if (items && items.length > 0) {
-        targetItemObj = items[Math.floor(Math.random() * items.length)];
-        targetItemName = targetItemObj.name;
+    // Проверяем живой рынок, если его нет — базу данных
+    if (window.marketState && window.marketState.items && window.marketState.items.length > 0) {
+        items = window.marketState.items;
+    } else if (typeof COMMODITY_DB !== 'undefined') {
+        items = COMMODITY_DB;
     }
 
-    const conversation = generateProceduralConversation(targetItemName, targetItemObj);
-    playProceduralDialogue(conversation);
+    if (items.length === 0) return;
+
+    // Выбираем случайный объект товара
+    const targetItemObj = items[Math.floor(Math.random() * items.length)];
+
+    // Генерируем диалог, передавая ВЕСЬ объект
+    const conversation = generateProceduralConversation(targetItemObj);
+    
+    if (conversation) {
+        playProceduralDialogue(conversation);
+    }
 }
 
 
