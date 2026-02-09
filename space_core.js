@@ -500,6 +500,8 @@ window.getVisualState = function() {
     return state;
 };
 
+/* В файле space_core.js */
+
 window.setVisualState = function(data) {
     if (!data) return;
 
@@ -518,6 +520,15 @@ window.setVisualState = function(data) {
         station.y = data.stationData.y;
         station.visible = data.stationData.visible;
     }
+
+    // === ИСПРАВЛЕНИЕ НАЧАЛО ===
+    // Если загрузились в системе со станцией, нужно заново сгенерировать её структуру (плитки)
+    if (currentSystemType === 'station') {
+        if (typeof generateStation === 'function') {
+            generateStation(); 
+        }
+    }
+    // === ИСПРАВЛЕНИЕ КОНЕЦ ===
 
     // Если есть рыночные данные, восстанавливаем их
     if (data.marketData && window.restoreMarketSaveData) {
