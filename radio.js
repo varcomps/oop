@@ -7,7 +7,7 @@
 const radioUI = document.getElementById('radioUI'); 
 const radioHeader = document.getElementById('radioHeader');
 const radioLog = document.getElementById('radioLog');
-
+let activeRadioTimeouts = [];
 let currentRadioTab = 'general';
 let activeChatId = null; 
 window.isRadioOpen = false;
@@ -241,6 +241,35 @@ function cleanupListeners() {
 // 3. СТИЛИ (CSS)
 // ==========================================
 const radioStyles = `
+/* Добавить к существующим стилям в radio.js */
+    .choice-container {
+        display: flex;
+        gap: 10px;
+        margin: 10px 0;
+        flex-wrap: wrap;
+    }
+    .radio-choice-btn {
+        background: rgba(0, 229, 255, 0.1);
+        border: 1px solid #00e5ff;
+        color: #00e5ff;
+        padding: 6px 12px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 11px;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .radio-choice-btn:hover {
+        background: #00e5ff;
+        color: #000;
+        box-shadow: 0 0 10px #00e5ff;
+    }
+    .radio-choice-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+        border-color: #333;
+        color: #555;
+        background: none;
+    }
     #radioUI { 
         width: 700px; height: 550px; 
         display: none; flex-direction: column; 
@@ -452,29 +481,8 @@ function initRadioInterface() {
 
     makeDraggable(document.getElementById('radioUI'), document.getElementById('radioHeader'));
     
-    loadGeneralLog();
 }
 
-// Функции сохранения/загрузки лога
-function saveGeneralLog() {
-    const log = document.getElementById('radioLog');
-    if (!log) return;
-    const content = log.innerHTML;
-    if (content.length > 50000) {
-        localStorage.setItem('pve_radio_log', content.slice(-50000)); 
-    } else {
-        localStorage.setItem('pve_radio_log', content);
-    }
-}
-
-function loadGeneralLog() {
-    const saved = localStorage.getItem('pve_radio_log');
-    const log = document.getElementById('radioLog');
-    if (saved && log) {
-        log.innerHTML = saved;
-        log.scrollTop = log.scrollHeight;
-    }
-}
 
 initRadioInterface();
 
@@ -688,7 +696,6 @@ window.addToRadioLog = function(msg, color = "#ccc") {
     log.appendChild(line);
     log.scrollTop = log.scrollHeight;
     
-    saveGeneralLog(); 
 };
 
 window.requestDistressCall = function() {
@@ -707,48 +714,98 @@ window.requestDistressCall = function() {
 };
 
 // Функция проигрывания диалога
-function playProceduralDialogue(conversation) {
+// --- НОВЫЙ МЕТОД: Удаление кнопок при потере связи (Варп) ---
+window.clearRadioChoices = function() {
+    // 1. ОСТАНАВЛИВАЕМ вывод всех запланированных сообщений
+    activeRadioTimeouts.forEach(t => clearTimeout(t));
+    activeRadioTimeouts = [];
+
+    // 2. Удаляем контейнеры с кнопками (без лишних сообщений в лог)
+    const containers = document.querySelectorAll('.choice-container');
+    containers.forEach(container => {
+        container.style.opacity = '0';
+        container.style.pointerEvents = 'none';
+        setTimeout(() => container.remove(), 300);
+    });
+};
+function playProceduralDialogue(conversation, template = null) {
+    // На всякий случай чистим старые таймеры перед новым диалогом
+    activeRadioTimeouts.forEach(t => clearTimeout(t));
+    activeRadioTimeouts = [];
+
     let delay = 0;
-    conversation.forEach((line) => {
-        setTimeout(() => {
+    
+    conversation.forEach((line, index) => {
+        const timeoutId = setTimeout(() => {
             window.addToRadioLog(`${line.name}: "${line.text}"`, line.color);
+            
+            if (index === conversation.length - 1 && template && template.choices) {
+                const choiceTimeoutId = setTimeout(() => {
+                    showRadioChoices(template.choices, line);
+                }, 500);
+                activeRadioTimeouts.push(choiceTimeoutId);
+            }
         }, delay);
-        delay += 1000 + (line.text.length * 40); 
+
+        activeRadioTimeouts.push(timeoutId);
+        delay += 500 + (line.text.length * 20);
     });
 }
+function showRadioChoices(choices, lastActor) {
+    const log = document.getElementById('radioLog');
+    if (!log) return;
 
+    const container = document.createElement('div');
+    container.className = 'choice-container';
+
+    choices.forEach(choice => {
+        const btn = document.createElement('button');
+        btn.className = 'radio-choice-btn';
+        btn.innerText = choice.text;
+        
+        btn.onclick = () => {
+            // Деактивируем все кнопки в этом блоке после клика
+            container.querySelectorAll('button').forEach(b => b.disabled = true);
+            
+            // 1. Выводим ответ игрока
+            window.addToRadioLog(`ВЫ: "${choice.text}"`, "#fff");
+            
+            // 2. Через паузу NPC отвечает на этот выбор
+            setTimeout(() => {
+                window.addToRadioLog(`${lastActor.name}: "${choice.reaction}"`, lastActor.color);
+            }, 1200);
+        };
+        
+        container.appendChild(btn);
+    });
+
+    log.appendChild(container);
+    log.scrollTop = log.scrollHeight;
+}
 window.checkIncomingTransmission = function() {
-    let items = [];
-    if (window.marketState && window.marketState.items && window.marketState.items.length > 0) {
-        items = window.marketState.items;
-    } else if (typeof COMMODITY_DB !== 'undefined') {
-        items = COMMODITY_DB;
-    }
-
+    if (Math.random() > 0.5) return; // Выход из функции в 50% случаев
+    let items = (typeof COMMODITY_DB !== 'undefined') ? COMMODITY_DB : [];
+    if (window.marketState && window.marketState.items) items = window.marketState.items;
     if (items.length === 0) return;
 
-    // --- АЛГОРИТМ ВЗВЕШЕННОГО ВЫБОРА ДИАЛОГА ---
     const totalWeight = PROCEDURAL_TEMPLATES.reduce((sum, t) => sum + (t.weight || 10), 0);
     let random = Math.random() * totalWeight;
     let selectedTemplate = PROCEDURAL_TEMPLATES[0];
 
-    for (let i = 0; i < PROCEDURAL_TEMPLATES.length; i++) {
-        const t = PROCEDURAL_TEMPLATES[i];
+    for (let t of PROCEDURAL_TEMPLATES) {
         if (random < (t.weight || 10)) {
             selectedTemplate = t;
             break;
         }
         random -= (t.weight || 10);
     }
-    // ------------------------------------------
 
     const targetItemObj = items[Math.floor(Math.random() * items.length)];
-    
-    // Передаем выбранный шаблон в генератор
     const conversation = generateProceduralFromTemplate(targetItemObj, selectedTemplate);
     
     if (conversation) {
-        playProceduralDialogue(conversation);
+        // ПЕРЕДАЕМ TEMPLATE в функцию проигрывания
+        playProceduralDialogue(conversation, selectedTemplate);
     }
 }
 function generateProceduralFromTemplate(itemObj, template) {

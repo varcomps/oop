@@ -98,12 +98,19 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
         autoJumpState.jumpsLeft--;
     }
 
+    // Активация варпа
     isWarping = true; 
+    
+    // --- ОЧИСТКА ВАРИАНТОВ ДИАЛОГА ---
+    if (window.clearRadioChoices) {
+        window.clearRadioChoices();
+    }
+
     warpState.phase = WARP_CHARGE; 
     warpState.timer = 0; 
     warpFactor = 0;
     
-    chargeContainer.style.display = 'block'; 
+    chargeContainer.style.display = 'block';
     
     let barColor = '#00e5ff';
     if (usePremium) barColor = '#ffd700';
