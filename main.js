@@ -190,7 +190,8 @@ function update() {
         
         let dx = 0, dy = 0; const moveSpeed = player.speed * TILE_SIZE;
         // Блокируем движение, если открыто любое UI
-        const isAnyUIOpen = isBuildMenuOpen || isStorageOpen || isSpectrumOpen || isMarketOpen || (typeof isRadioOpen !== 'undefined' && isRadioOpen);
+        const isAnyUIOpen = isBuildMenuOpen || isStorageOpen || isSpectrumOpen || isMarketOpen || 
+                    (typeof isRadioOpen !== 'undefined' && isRadioOpen) || window.isCraftingOpen;
         
         // --- ВАЖНОЕ ИЗМЕНЕНИЕ: БЛОКИРОВКА ПРИ ВВОДЕ ТЕКСТА ---
         const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
@@ -231,11 +232,16 @@ function update() {
              const comm = stationModules.find(m => m.type === 'commodities_terminal');
              interactables.commodities.active = comm && Math.hypot(player.x - (comm.x + comm.w/2) * TILE_SIZE, player.y - (comm.y + comm.h/2) * TILE_SIZE) < TILE_SIZE * 2;
 
+             const craft = stationModules.find(m => m.type === 'crafting_terminal');
+             interactables.crafting = interactables.crafting || { active: false };
+             interactables.crafting.active = craft && Math.hypot(player.x - (craft.x + craft.w/2) * TILE_SIZE, player.y - (craft.y + craft.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+
              if (!isAnyUIOpen) {
                  if (nearShip) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРНУТЬСЯ НА КОРАБЛЬ";
                  else if (interactables.tradePost.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОРГОВЛЯ";
                  else if (interactables.engineering.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ИНЖЕНЕРНЫЙ ТЕРМИНАЛ";
                  else if (interactables.commodities.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОВАРНЫЙ РЫНОК";
+                 else if (interactables.crafting.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРСТАК";
                  else {
                      let roomName = "СТАНЦИЯ";
                      const gx = Math.floor(player.x / TILE_SIZE);
@@ -454,10 +460,10 @@ window.addEventListener('keydown', (e) => {
     // --- УПРАВЛЕНИЕ И ВЗАИМОДЕЙСТВИЕ ---
 
     switch(e.code) {
-        case 'KeyW': case 'ArrowUp': inputs.up = true; break;
-        case 'KeyS': case 'ArrowDown': inputs.down = true; break;
-        case 'KeyA': case 'ArrowLeft': inputs.left = true; break;
-        case 'KeyD': case 'ArrowRight': inputs.right = true; break;
+        case 'KeyW': inputs.up = true; break;
+        case 'KeyS': inputs.down = true; break;
+        case 'KeyA': inputs.left = true; break;
+        case 'KeyD': inputs.right = true; break;
         
         case 'KeyM': 
             if ((currentState === STATE_SHIP && interactables.bridge.active) || currentState === STATE_MAP) {
@@ -480,6 +486,9 @@ window.addEventListener('keydown', (e) => {
                  if (interactables.engineering.active) {
                      currentState = STATE_SHIP; 
                      tryToggleBuildMenu(); 
+                 }
+                 if (interactables.crafting && interactables.crafting.active) {
+                    window.toggleCrafting(true); // Заменяем console.log на открытие интерфейса
                  }
             }
             break;
@@ -540,6 +549,18 @@ function drawHangar() {
             
             ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#e040fb"; ctx.textAlign = "center";
             ctx.fillText("MARKET", x + w/2, y + h/2 - 5); ctx.fillText("ACCESS", x + w/2, y + h/2 + 15);
+        }
+        if (mod.type === 'crafting_terminal') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            // Визуальный стиль: Оранжево-красный (ржавый/индустриальный)
+            ctx.strokeStyle = (interactables.crafting && interactables.crafting.active) ? '#ff7043' : '#d84315'; 
+            ctx.lineWidth = 2; 
+            ctx.strokeRect(x,y,w,h);
+            
+            ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#ff5722"; ctx.textAlign = "center";
+            ctx.fillText("CRAFT", x + w/2, y + h/2 - 5); 
+            ctx.fillText("UNIT", x + w/2, y + h/2 + 15);
         }
     });
     

@@ -1,3 +1,4 @@
+
 const storageUI = document.getElementById('storageUI');
 const sidePanel = document.getElementById('sidePanel');
 const gridContainer = document.getElementById('gridContainer');
@@ -113,7 +114,8 @@ function renderStorageList() {
 
         const btn = document.createElement('div');
         btn.className = 'shop-item-btn';
-        btn.innerHTML = `<span>FUEL CELL (2x1)</span><span class="price-tag">${fuelCost} SC</span>`;
+        // Используем новую функцию форматирования для FUEL CELL
+        btn.innerHTML = `<span>FUEL CELL (2x1)</span><span class="price-tag">${window.formatCurrencyFancy(fuelCost)} SC</span>`;
         btn.onclick = () => {
             if (player.credits >= fuelCost) tryAutoBuy('fuel', 2, 1, fuelCost);
         };
@@ -122,7 +124,8 @@ function renderStorageList() {
         const btnPrem = document.createElement('div');
         btnPrem.className = 'shop-item-btn';
         btnPrem.style.borderColor = '#ffd700';
-        btnPrem.innerHTML = `<span style="color:#ffd700">SUPER FUEL (2x1)</span><span class="price-tag">${premiumCost} SC</span>`;
+        // Используем новую функцию форматирования для SUPER FUEL
+        btnPrem.innerHTML = `<span style="color:#ffd700">SUPER FUEL (2x1)</span><span class="price-tag">${window.formatCurrencyFancy(premiumCost)} SC</span>`;
         btnPrem.onclick = () => {
             if (player.credits >= premiumCost) tryAutoBuy('fuel_premium', 2, 1, premiumCost);
         };
@@ -132,7 +135,8 @@ function renderStorageList() {
         btnShift.className = 'shop-item-btn';
         btnShift.style.borderColor = '#d50000'; 
         btnShift.style.background = '#2b0b0b';
-        btnShift.innerHTML = `<span style="color:#ff1744">SHIFT FUEL (1x1)</span><span class="price-tag">${shiftFuelCost} SC</span>`;
+        // Используем новую функцию форматирования для SHIFT FUEL
+        btnShift.innerHTML = `<span style="color:#ff1744">SHIFT FUEL (1x1)</span><span class="price-tag">${window.formatCurrencyFancy(shiftFuelCost)} SC</span>`;
         btnShift.onclick = () => {
             if (player.credits >= shiftFuelCost) tryAutoBuy('fuel_shift', 1, 1, shiftFuelCost);
         };

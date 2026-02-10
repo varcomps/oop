@@ -1,4 +1,4 @@
-/* sector_station.js - СТРОГОЕ ТЗ: Хаб сверху, комнаты в 3 стороны */
+/* sector_station.js - СТРОГОЕ ТЗ: Хаб сверху, комнаты в 3 стороны + Мастерская */
 
 let station = { x: 0, y: 0, dockingRadius: 150, visible: true }; 
 let stationTiles = []; 
@@ -79,6 +79,20 @@ function generateStation() {
     fillRect(roomUpX, roomUpY, 4, 4);
     window.stationZones.push({ name: "ИНЖЕНЕРНЫЙ ОТСЕК", x: roomUpX, y: roomUpY, w: 4, h: 4 });
     stationModules.push({ type: 'engineering_terminal', x: roomUpX + 1, y: roomUpY + 1, w: 2, h: 2 });
+
+    // --- 7. НОВАЯ КОМНАТА: МАСТЕРСКАЯ (Слева от коридора) ---
+    // Коридор находится примерно на X=28..31. Делаем ответвление влево.
+    const craftRoomX = centerX - 8; // Смещаем влево от центра
+    const craftRoomY = 12; // По вертикали посередине коридора
+    
+    // Сама комната 4x4
+    fillRect(craftRoomX, craftRoomY, 4, 4);
+    // Проход к коридору (соединитель)
+    fillRect(craftRoomX + 4, craftRoomY + 1, 2, 2);
+
+    window.stationZones.push({ name: "МАСТЕРСКАЯ", x: craftRoomX, y: craftRoomY, w: 4, h: 4 });
+    // Добавляем терминал крафта
+    stationModules.push({ type: 'crafting_terminal', x: craftRoomX + 1, y: craftRoomY + 1, w: 2, h: 2 });
 }
 
 function isShipInDockingZone() {

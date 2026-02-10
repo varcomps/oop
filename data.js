@@ -1,3 +1,4 @@
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const uiHint = document.getElementById('ui-hint');
@@ -17,27 +18,25 @@ let transition = { active: false, alpha: 0, direction: 1, targetState: null };
 let time = 0;
 
 // Игрок (hullParts - инвентарь каркаса)
-// ИСПРАВЛЕНИЕ: Защита теперь использует смещение (Offset), а не XOR, чтобы поддерживать дроби
 class SecureValue {
     constructor(value) {
-        this._offset = Math.random() * 999999; // Случайное смещение
-        this._v = value + this._offset;        // Храним значение со смещением
+        this._offset = Math.random() * 999999; 
+        this._v = value + this._offset;        
     }
 
     get v() {
-        return this._v - this._offset; // При чтении убираем смещение
+        return this._v - this._offset; 
     }
 
     set v(newValue) {
-        // При записи генерируем новое смещение, чтобы значение в памяти менялось
+        // Округляем до 6 знаков при записи
+        newValue = Math.round(newValue * 1000000) / 1000000;
         this._offset = Math.random() * 999999;
         this._v = newValue + this._offset;
         
-        // Авто-сохранение в Firebase при изменении
         if (window.saveGameData) window.saveGameData(); 
     }
     
-    // Для удобства отображения
     toString() { return (this._v - this._offset).toString(); }
     toFixed(n) { return (this._v - this._offset).toFixed(n); }
 }
@@ -48,7 +47,6 @@ const rawPlayer = {
     radius: 0.35, 
     speed: 0.15, 
     color: '#66bb6a',
-    // ИСПРАВЛЕНИЕ: Стартовый баланс 0.01 SC
     _credits: new SecureValue(0.01),
     _hullParts: new SecureValue(0),
     _fuel: new SecureValue(0) 
@@ -84,11 +82,11 @@ let currentSystemType = 'station';
 let nextJumpTarget = null; 
 let pendingJumpCost = 0;   
 
-// Состояние сканера (для сохранения между закрытиями)
+// Состояние сканера
 let spectrumState = {
-    hasScanned: false, // Было ли произведено сканирование
-    signals: [],       // Найденные сигналы
-    lockedIndex: -1    // Индекс выбранного
+    hasScanned: false, 
+    signals: [],       
+    lockedIndex: -1    
 };
 
 // Управление
@@ -106,9 +104,32 @@ const interactables = {
     commodities: { active: false, x: 0, y: 0 } 
 };
 
+// [ОБНОВЛЕНИЕ] Форматирование: Градиент серого к центру (Без смены шрифта)
+window.formatCurrencyFancy = function(amount) {
+    const val = parseFloat(amount);
+    const fixed = isNaN(val) ? "0.00000" : val.toFixed(5);
+    
+    const parts = fixed.split('.');
+    const integerPart = parts[0];
+    const dec = parts[1]; // Строка из 5 цифр
+
+    // Целая часть и точка - СЕРЫЕ
+    const intHtml = `<span style="color: #666;">${integerPart}.</span>`;
+
+    // Дробная часть - Эффект затухания (Fade out) от центра
+    const decHtml = 
+           `<span style="color: #666;">${dec[0]}</span>` +
+           `<span style="color: #bbb;">${dec[1]}</span>` +
+           `<span style="color: #fff; font-weight: 900; text-shadow: 0 0 8px rgba(255,255,255,0.6);">${dec[2]}</span>` +
+           `<span style="color: #bbb;">${dec[3]}</span>` +
+           `<span style="color: #666;">${dec[4]}</span>`;
+           
+    return intHtml + decHtml;
+};
+
 function updateCurrencyUI() {
     if (currencyDisplay) {
-        // player.credits теперь возвращает число, всё ок
-        currencyDisplay.innerHTML = `${player.credits.toFixed(4)} <span class="sc-symbol">SC</span>`;
+        const fancyMoney = window.formatCurrencyFancy(player.credits);
+        currencyDisplay.innerHTML = `${fancyMoney} <span class="sc-symbol">SC</span>`;
     }
 }

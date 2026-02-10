@@ -1,5 +1,4 @@
-
-/* market.js - Обновленная версия: Выделение товаров в наличии + цифра количества */
+/* market.js - Цены: Шрифт Orbitron + Серый градиент (интеграция с data.js) */
 
 const marketUI = document.getElementById('marketUI');
 const marketListContainer = document.getElementById('marketList');
@@ -155,12 +154,10 @@ function generateStationInventory() {
         else if (index < 40) { chance = 0.3; minQ = 5; maxQ = 10; }
         else if (index < 50) { chance = 0.2; minQ = 4; maxQ = 8; }
 
-        // Независимый шанс для продажи (станция -> игрок)
         if (Math.random() < chance) {
             marketState.stationStock.sell[item.id] = Math.floor(Math.random() * (maxQ - minQ + 1)) + minQ;
         }
 
-        // Независимый шанс для покупки (игрок -> станция)
         if (Math.random() < chance) {
             marketState.stationStock.buy[item.id] = Math.floor(Math.random() * (maxQ - minQ + 1)) + minQ;
         }
@@ -199,18 +196,14 @@ function renderMarketList() {
         div.className = 'market-item-row';
         if (item.id === marketState.selectedId) div.classList.add('selected');
         
-        // --- ИЗМЕНЕНИЕ: Подсчет и подсветка ---
         const owned = countPlayerCargo(item.id);
         let displayName = item.name;
 
         if (owned > 0) {
-            // Выделяем цветом фона (чуть светлее) и зеленой полоской
             div.style.background = '#1b262c';
             div.style.color = '#e0f2f1';
-            // Добавляем цифру перед названием
             displayName = `${owned} ${item.name}`;
         }
-        // -------------------------------------
 
         let status = '';
         if (marketState.stationStock.sell[item.id] > 0) status += '<span class="status-sell" style="margin-right:2px">SELL</span>';
@@ -220,9 +213,10 @@ function renderMarketList() {
         const diff = item.price - prev;
         const trend = diff >= 0 ? '<span class="trend-up">▲</span>' : '<span class="trend-down">▼</span>';
 
+        // [ОБНОВЛЕНИЕ] Применяем #666 базовый цвет, чтобы "склеить" его с началом градиента
         div.innerHTML = `
             <div class="mi-name">${displayName}</div>
-            <div class="mi-price">${item.price.toFixed(5)}</div>
+            <div class="mi-price" style="color: #666; font-family: 'Orbitron', monospace;">${window.formatCurrencyFancy ? window.formatCurrencyFancy(item.price) : item.price.toFixed(5)}</div>
             <div class="mi-trend">${trend}</div>
             <div class="mi-status">${status}</div>
         `;
@@ -242,7 +236,6 @@ window.renderMarketGrid = function() {
             div.className = 'grid-item-visual';
             div.style.boxSizing = 'border-box';
 
-            // ИСПРАВЛЕНИЕ: Унификация с storage.js
             if (item.type === 'fuel') {
                 div.classList.add('fuel-style');
                 div.innerHTML = '<div class="fuel-charge"></div><span class="fuel-label">F-CELL</span>';
@@ -261,7 +254,6 @@ window.renderMarketGrid = function() {
             }
             else if (item.type === 'cargo') {
                 div.classList.add('cargo-style');
-                // Унифицировано с storage.js: substring(0,8) и 'CRATE'
                 div.innerHTML = `<span class="cargo-text">${item.name ? item.name.substring(0,8) : 'CRATE'}</span>`;
             }
 
@@ -303,7 +295,9 @@ function updateTradePanel(item) {
     const playerAmount = countPlayerCargo(item.id);
 
     let html = `<div class="tp-header">${item.name}</div>`;
-    html += `<div class="tp-info">PRICE: <span style="color:#ffd700">${item.price.toFixed(5)} SC</span></div>`;
+    
+    // [ОБНОВЛЕНИЕ] Применяем #666 базовый цвет и Orbitron
+    html += `<div class="tp-info">PRICE: <span style="color:#666; font-family: 'Orbitron', monospace;">${window.formatCurrencyFancy ? window.formatCurrencyFancy(item.price) : item.price.toFixed(5)} SC</span></div>`;
     
     if (canBuy) html += `<div class="tp-info">STATION STOCK: <span style="color:#00e5ff">${sellStock}</span></div>`;
     if (canSell) html += `<div class="tp-info">STATION DEMAND: <span style="color:#ea80fc">${buyDemand}</span></div>`;
@@ -406,7 +400,7 @@ function drawGraph(item, hoverX) {
             marketCtx.beginPath(); marketCtx.arc(p.x, p.y, 3, 0, Math.PI*2); marketCtx.fill();
 
             marketCtx.fillStyle = '#fff';
-            marketCtx.font = '10px monospace';
+            marketCtx.font = '10px Orbitron';
             const text = val.toFixed(5);
             const tm = marketCtx.measureText(text);
             
@@ -425,7 +419,6 @@ function countPlayerCargo(id) {
     return window.placedStorageItems.filter(i => i.type === 'cargo' && i.commodityId === id).length;
 }
 
-/* market.js — обновленная функция tradeTransaction */
 function tradeTransaction(id, action) {
     const item = marketState.items.find(i => i.id === id);
     if (!item) return;
@@ -438,7 +431,6 @@ function tradeTransaction(id, action) {
             if (tryAutoBuyCargo(id, item.name, item.price, item.w, item.h)) {
                 marketState.stationStock.sell[id]--; 
                 
-                // === СИНХРОНИЗАЦИЯ: Отправляем обновленный сток в сеть ===
                 if (window.broadcastMarketUpdate) window.broadcastMarketUpdate();
 
                 setTradeStatus(`BOUGHT ${item.name}`, "#00e676");
@@ -460,7 +452,6 @@ function tradeTransaction(id, action) {
             player.credits += item.price;
             marketState.stationStock.buy[id]--; 
 
-            // === СИНХРОНИЗАЦИЯ: Отправляем обновленный сток в сеть ===
             if (window.broadcastMarketUpdate) window.broadcastMarketUpdate();
 
             updateCurrencyUI();
@@ -502,26 +493,19 @@ window.getMarketSaveData = function() {
         stock: marketState.stationStock
     };
 };
-/* В market.js -> Добавьте функцию синхронизации */
+
 window.syncMarketWithHost = function(data) {
     if (!data || !data.items || !data.stock) return;
 
-    // 1. Обновляем состояние цен и истории
     marketState.items = data.items;
-    
-    // 2. Обновляем запасы станции
     marketState.stationStock = data.stock;
 
-    // 3. Если у игрока открыто окно рынка, перерисовываем его
     if (isMarketOpen) {
         renderMarketList();
-        
-        // Обновляем детали выбранного товара (цену и кнопки Buy/Sell)
         if (marketState.selectedId) {
             const item = marketState.items.find(i => i.id === marketState.selectedId);
             if (item) {
                 updateTradePanel(item);
-                // Перерисовываем график, если функция доступна
                 if (typeof drawGraph === 'function') {
                     drawGraph(item, -1);
                 }
@@ -529,6 +513,7 @@ window.syncMarketWithHost = function(data) {
         }
     }
 };
+
 window.restoreMarketSaveData = function(data) {
     if (!data) return;
     if (data.items) marketState.items = data.items;
@@ -536,6 +521,4 @@ window.restoreMarketSaveData = function(data) {
     console.log("Market data restored.");
 };
 
-// === ИСПРАВЛЕНИЕ: Экспорт функции в глобальную область видимости ===
-// Это необходимо, так как HTML onclick="tradeTransaction(...)" ищет функцию в window
 window.tradeTransaction = tradeTransaction;
