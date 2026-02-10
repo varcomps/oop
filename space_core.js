@@ -523,19 +523,36 @@ function drawMap() {
     const cx = canvas.width / 2, cy = canvas.height / 2;
     let parallaxScale = 1, isActive = false, objAlpha = 1;
 
+    // Рассчитываем параметры эффекта выхода из варпа
     if (isWarping) {
         if (warpState.phase === WARP_JUMP || warpState.phase === WARP_COAST) {
-             parallaxScale = 1 + (warpFactor / 20); objAlpha = Math.max(0, 1 - (warpFactor / 60)); if (objAlpha > 0.01) isActive = true;
+             parallaxScale = 1 + (warpFactor / 20); 
+             objAlpha = Math.max(0, 1 - (warpFactor / 60)); 
+             if (objAlpha > 0.01) isActive = true;
         } else if (warpState.phase === WARP_EXIT) {
-             parallaxScale = 1 - (warpFactor / 150); if (parallaxScale < 0) parallaxScale = 0; isActive = true; objAlpha = 1; 
+             // Плавное уменьшение масштаба при выходе
+             parallaxScale = 1 - (warpFactor / 150); 
+             if (parallaxScale < 0) parallaxScale = 0; 
+             isActive = true; 
+             // Альфа полная, так как мы "прилетели"
+             objAlpha = 1; 
         } else isActive = true; 
     } else isActive = true;
 
+    // Отрисовка статических объектов (Станция, Звезды)
     if (isActive && currentSystemType) {
         if (currentSystemType === 'station') renderStation(cx, cy, parallaxScale, objAlpha);
         else if (currentSystemType === 'system') renderSystem(cx, cy, parallaxScale, objAlpha);
         else if (currentSystemType === 'black_hole') renderBlackHole(cx, cy, parallaxScale, objAlpha);
     }
+
+    // --- НОВОЕ: Отрисовка других игроков с учетом варп-эффектов ---
+    // Мы передаем objAlpha (прозрачность) и parallaxScale (зум)
+    if (window.drawRemotePlayers && isActive) {
+        // Для карты offset не нужен, игроки имеют абсолютные координаты
+        window.drawRemotePlayers(ctx, 2, {x:0, y:0}, 50, objAlpha, parallaxScale);
+    }
+    // -------------------------------------------------------------
 
     ctx.save(); ctx.translate(mapShip.x, mapShip.y); ctx.rotate(mapShip.angle);
     if (warpState.phase === WARP_CHARGE) { const shake = warpFactor * 2; ctx.translate(Math.random() * shake - shake / 2, Math.random() * shake - shake / 2); }
