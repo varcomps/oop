@@ -17,9 +17,11 @@ let warpState = { phase: WARP_IDLE, timer: 0 };
 let btnErrorTimer = 0;
 
 // --- ЛОГИКА АВТО-ПРЫЖКА ---
-let autoJumpState = { active: false, jumpsLeft: 0, finalTargetType: null, usePremium: false };
+let autoJumpState = { active: false, jumpsLeft: 0, finalTargetType: null, usePremium: false, targetPlayerData: null };
 
-function startAutoJumpSequence(count, targetType, usePremium = false) {
+function startAutoJumpSequence(count, targetType, usePremium = false, targetPlayerData = null) {
+    console.log(`>>> [DEBUG] startAutoJumpSequence: Цель=${targetType}, Прыжков=${count}, Игрок=${targetPlayerData ? targetPlayerData.nickname : 'нет'}`);
+    
     if (autoJumpState.active) return;
     
     if (isDocked) {
@@ -51,6 +53,7 @@ function startAutoJumpSequence(count, targetType, usePremium = false) {
     autoJumpState.jumpsLeft = count;
     autoJumpState.finalTargetType = targetType;
     autoJumpState.usePremium = usePremium; 
+    autoJumpState.targetPlayerData = targetPlayerData; // СТРОГО: Сохраняем данные игрока для финального прыжка
     
     initiateHyperJump(true, autoJumpState.usePremium); 
 }
@@ -68,9 +71,11 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
         btnErrorTimer = 60; return; 
     }
 
+    // Если это ручной запуск, но есть проложенный маршрут в Спектре
     if (!isAuto && window.activeAutopilotRoute) {
         const route = window.activeAutopilotRoute;
-        startAutoJumpSequence(route.jumpsRequired, route.targetType, usePremium);
+        console.log(">>> [DEBUG] Запуск маршрута из Спектра к:", route.targetType);
+        startAutoJumpSequence(route.jumpsRequired, route.targetType, usePremium, route.playerData);
         return;
     }
     
@@ -97,11 +102,12 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
     if (isAuto && autoJumpState.active) {
         autoJumpState.jumpsLeft--;
     }
-
-    // Активация варпа
+    // СИГНАЛ МУЛЬТИПЛЕЕРУ: Мы уходим!
+    if (window.handleWarpLeave) {
+        window.handleWarpLeave();
+    }
     isWarping = true; 
     
-    // --- ОЧИСТКА ВАРИАНТОВ ДИАЛОГА ---
     if (window.clearRadioChoices) {
         window.clearRadioChoices();
     }
@@ -169,6 +175,7 @@ function updateWarpLogic() {
                  if (target === 'station') target = 'СТАНЦИЯ';
                  else if (target === 'system') target = 'СИСТЕМА';
                  else if (target === 'black_hole') target = 'ДЫРА';
+                 else if (target === 'player') target = 'ПИЛОТ';
                  else target = target.toUpperCase();
                  
                  if (fuel >= jumps) {
@@ -238,8 +245,6 @@ function updateWarpLogic() {
         warpState.timer++; 
         
         if (warpState.timer === 20) { 
-            // Временно скрываем тип системы для анимации
-            // Но НЕ сбрасываем координаты станции здесь
             if (!autoJumpState.active) jumpBtn.innerHTML = "В ПУТИ..."; 
         }
         
@@ -251,29 +256,41 @@ function updateWarpLogic() {
                 currentSystemType = null; 
             } 
             else {
-                // Устанавливаем целевой тип системы
                 const targetType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
-                
-                // Если мы прыгаем в станцию
-                if (targetType === 'station') {
-                    // Генерируем НОВУЮ станцию, только если мы прибыли из варпа
-                    // (Логика варпа подразумевает перемещение, так что генерируем всегда новую точку)
-                    currentSystemType = 'station';
-                    station.x = Math.random() * canvas.width; 
-                    station.y = Math.random() * canvas.height; 
-                    station.visible = true;
-                    generateStation(); // Генерирует структуру (ангары и т.д.)
+
+                if (targetType === 'player' && autoJumpState.targetPlayerData) {
+                    if (window.syncWorldWithPlayer) window.syncWorldWithPlayer(autoJumpState.targetPlayerData);
                 } 
+                else if (targetType === 'station') {
+                    currentSystemType = 'station';
+                    
+                    // ОТСТУП ОТ СТЕН (например, 100 пикселей)
+                    const padding = 100; 
+
+                    // РАНДОМ СТРОГО В ПРЕДЕЛАХ СЕКТОРА С УЧЕТОМ ОТСТУПА
+                    station.x = padding + Math.random() * (canvas.width - padding * 2);
+                    station.y = padding + Math.random() * (canvas.height - padding * 2);
+                    station.visible = true;
+
+                    if (typeof generateStation === 'function') generateStation();
+                }
                 else if (targetType === 'system') {
                     currentSystemType = 'system';
-                    generateRealRandomSystem(); 
-                } else if (targetType === 'black_hole') {
+                    if (typeof generateRealRandomSystem === 'function') generateRealRandomSystem(); 
+                } 
+                else if (targetType === 'black_hole') {
                     currentSystemType = 'black_hole';
-                    generateBlackHole();
-                } else {
-                    currentSystemType = 'system';
-                    generateRealRandomSystem();
+                    if (typeof generateBlackHole === 'function') generateBlackHole();
+                } 
+                else {
+                    currentSystemType = null; 
+                    if (typeof station !== 'undefined') station.visible = false;
                 }
+            }
+            
+            // Генерируем случайную тему ТОЛЬКО если это не прыжок к игроку
+            if (!autoJumpState.active || autoJumpState.finalTargetType !== 'player') {
+                bgState.nextTheme = generateRandomTheme();
             }
             
             if (!autoJumpState.active) jumpBtn.innerHTML = "ПРИБЫТИЕ..."; 
@@ -302,25 +319,30 @@ function updateWarpLogic() {
                 warpFactor = 0;
                 chargeBar.style.width = '0%';
                 
-                bgState.currentTheme = bgState.nextTheme;
-                bgState.nextTheme = generateRandomTheme();
+                // Не меняем тему на случайную при промежуточных прыжках к игроку
+                if (autoJumpState.finalTargetType !== 'player') {
+                    bgState.currentTheme = bgState.nextTheme;
+                    bgState.nextTheme = generateRandomTheme();
+                }
+                // Если мы у друга, блокируем перезапись темы темой "из буфера"
+                if (!autoJumpState.active || autoJumpState.finalTargetType !== 'player') {
+                    bgState.currentTheme = bgState.nextTheme; 
+                }
                 bgState.progress = 0;
                 
                 return; 
             }
 
-            // === [ИСПРАВЛЕНИЕ] ОЧИСТКА ОБЪЕКТОВ ПРИ ВЫХОДЕ ИЗ ВАРПА ===
+            // Очистка при выходе
             if (currentSystemType !== 'system' && typeof resetStarSystem === 'function') {
-                resetStarSystem(); // Выключаем звезду, если мы не в системе
+                resetStarSystem();
             }
             if (currentSystemType !== 'black_hole') {
-                // Сбрасываем радиус дыры в ноль, чтобы она исчезла
                 if (typeof blackHole !== 'undefined') blackHole.radius = 0; 
             }
             if (currentSystemType !== 'station') {
                 if (typeof station !== 'undefined') station.visible = false;
             }
-            // =========================================================
 
             warpFactor = 0; 
             isWarping = false; 
@@ -329,7 +351,13 @@ function updateWarpLogic() {
             if (window.resetSpectrum) window.resetSpectrum();
             
             if (autoJumpState.active) {
+                // Если прыжок был обычным (не к игроку), сбрасываем SystemID на свой
+                if (autoJumpState.finalTargetType !== 'player' && window.resetToMySystem) {
+                    console.log(">>> [DEBUG] Сброс системы на собственную.");
+                    window.resetToMySystem();
+                }
                 autoJumpState.active = false;
+                autoJumpState.targetPlayerData = null;
                 window.activeAutopilotRoute = null; 
             }
 

@@ -1,5 +1,4 @@
-
-/* spectrum.js - Исправлен черный экран после прыжка с открытым сканером */
+/* spectrum.js - ПОЛНАЯ ВЕРСИЯ С ОТЛАДКОЙ */
 
 const sp3dCanvas = document.getElementById('sp3dCanvas');
 const sp3dCtx = sp3dCanvas.getContext('2d');
@@ -35,6 +34,9 @@ class StarNode {
         this.px = 0; this.py = 0; this.scale = 0; 
         
         this.isPlayer = (Math.abs(x) < 5 && Math.abs(y) < 5 && Math.abs(z) < 5);
+        this.isRemotePlayer = false; 
+        this.playerData = null;      
+
         this.type = this.isPlayer ? 'player' : 'unknown';
         this.revealedType = this.isPlayer ? 'player' : this.generateType();
         
@@ -49,6 +51,8 @@ class StarNode {
     }
 
     generateType() {
+        if (this.isRemotePlayer) return 'player';
+        
         const r = Math.random();
         if (r < 0.012) return 'station'; 
         if (r < 0.016) return 'system';  
@@ -63,6 +67,11 @@ class StarNode {
         if (this.type === 'station') { this.baseColor = '#00e5ff'; this.radius = 5; }
         else if (this.type === 'system') { this.baseColor = '#ffab00'; this.radius = 4; }
         else if (this.type === 'black_hole') { this.baseColor = '#d500f9'; this.radius = 6; }
+        else if (this.type === 'player') { 
+            this.baseColor = '#ff1744'; // ЯРКО-КРАСНЫЙ ЦВЕТ ДЛЯ ИГРОКА
+            this.radius = 8; // БОЛЬШОЙ РАЗМЕР
+            this.alpha = 1;
+        }
         else { this.baseColor = '#555'; this.alpha = 0.4; } 
         this.color = this.baseColor;
     }
@@ -87,6 +96,8 @@ window.resetSpectrum = function() {
 };
 
 function initSpectrum() {
+    console.log(">>> [DEBUG] initSpectrum ЗАПУЩЕН"); // ЛОГ 1
+
     if (stars3D.length > 0) return;
 
     sp3dCanvas.width = 800;
@@ -97,6 +108,7 @@ function initSpectrum() {
     scan3DState.playerNode = player;
     stars3D.push(player);
     
+    // Обычные звезды
     for(let i=0; i<STAR_COUNT; i++) {
         const r = Math.cbrt(Math.random()) * CLOUD_RADIUS;
         const theta = Math.random() * Math.PI * 2;
@@ -111,6 +123,54 @@ function initSpectrum() {
         }
     }
 
+    // --- ПРОВЕРКА И ЗАПУСК МУЛЬТИПЛЕЕРА ---
+    if (typeof window.scanForPlayers === 'function') {
+        console.log(">>> [DEBUG] Функция scanForPlayers НАЙДЕНА. Выполняю запрос..."); // ЛОГ 2
+        
+        window.scanForPlayers().then(players => {
+            console.log(">>> [DEBUG] Ответ от scanForPlayers:", players); // ЛОГ 3
+            
+            if (players.length === 0) {
+                console.log(">>> [DEBUG] Список игроков пуст (или никого нет в сети).");
+            }
+
+            players.forEach(p => {
+                console.log(">>> [DEBUG] Добавляю игрока в спектр:", p.nickname); // ЛОГ 4
+
+                // Генерируем "звезду" игрока
+                const r = Math.random() * 100 + 50; 
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                
+                const x = r * Math.sin(phi) * Math.cos(theta);
+                const y = r * Math.sin(phi) * Math.sin(theta);
+                const z = r * Math.cos(phi);
+
+                const node = new StarNode(x, y, z);
+                node.isRemotePlayer = true; 
+                node.type = 'player';
+                node.revealedType = 'player';
+                node.baseColor = '#d50000';
+                node.color = '#d50000';
+                node.radius = 8; 
+                node.playerData = p; 
+                
+                stars3D.push(node);
+                
+                // Сразу связываем, чтобы можно было найти путь
+                const dist = getDist3D(scan3DState.playerNode, node);
+                scan3DState.playerNode.neighbors.push({ node: node, dist: dist });
+                node.neighbors.push({ node: scan3DState.playerNode, dist: dist });
+            });
+        }).catch(err => {
+            console.error(">>> [DEBUG] ОШИБКА при сканировании игроков:", err);
+        });
+    } else {
+        console.error(">>> [DEBUG] ОШИБКА: Функция window.scanForPlayers НЕ ОПРЕДЕЛЕНА. Проверь multiplayer.js!");
+    }
+    // --------------------------------------
+
+    // Связи
     stars3D.forEach(star => {
         stars3D.forEach(other => {
             if (star === other) return;
@@ -124,7 +184,7 @@ function initSpectrum() {
     btnScanAction.style.display = 'inline-block';
 
     sp3dCanvas.onmousedown = (e) => { 
-        if (typeof isWarping !== 'undefined' && isWarping) return; // Блокируем управление при помехах
+        if (typeof isWarping !== 'undefined' && isWarping) return; 
         isDragging3D = true; 
         lastMouse.x = e.clientX; 
         lastMouse.y = e.clientY; 
@@ -156,26 +216,18 @@ function toggleSpectrum(state) {
 
 // --- ОТРИСОВКА ПОМЕХ ---
 function drawWarpStatic() {
-    // 1. Темный фон с легким "шлейфом"
     sp3dCtx.fillStyle = 'rgba(0, 5, 10, 0.4)';
     sp3dCtx.fillRect(0, 0, sp3dCanvas.width, sp3dCanvas.height);
-
-    // 2. Горизонтальные линии (Scanlines)
     for (let i = 0; i < 30; i++) {
         const y = Math.random() * sp3dCanvas.height;
         const h = Math.random() * 20 + 2;
         const alpha = Math.random() * 0.3;
-        
-        // Чередуем цвета помех (циан, красный, белый)
         const rand = Math.random();
-        if(rand > 0.6) sp3dCtx.fillStyle = `rgba(0, 229, 255, ${alpha})`; // Cyan
-        else if (rand > 0.3) sp3dCtx.fillStyle = `rgba(255, 23, 68, ${alpha})`; // Red
-        else sp3dCtx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // White
-
+        if(rand > 0.6) sp3dCtx.fillStyle = `rgba(0, 229, 255, ${alpha})`; 
+        else if (rand > 0.3) sp3dCtx.fillStyle = `rgba(255, 23, 68, ${alpha})`; 
+        else sp3dCtx.fillStyle = `rgba(255, 255, 255, ${alpha})`; 
         sp3dCtx.fillRect(0, y, sp3dCanvas.width, h);
     }
-
-    // 3. Белый шум (Зерно)
     for (let i = 0; i < 200; i++) {
         const x = Math.random() * sp3dCanvas.width;
         const y = Math.random() * sp3dCanvas.height;
@@ -185,51 +237,36 @@ function drawWarpStatic() {
         sp3dCtx.fillRect(x, y, w, 2);
     }
     sp3dCtx.globalAlpha = 1.0;
-
-    // 4. Текст ошибки
-    if (Math.random() > 0.1) { // Легкое мерцание текста
+    if (Math.random() > 0.1) { 
         sp3dCtx.save();
-        sp3dCtx.translate((Math.random()-0.5)*5, (Math.random()-0.5)*5); // Тряска текста
-        
+        sp3dCtx.translate((Math.random()-0.5)*5, (Math.random()-0.5)*5); 
         sp3dCtx.font = "bold 40px Orbitron";
         sp3dCtx.textAlign = "center";
-        
-        // Эффект хроматической аберрации для текста
         sp3dCtx.fillStyle = "rgba(255, 0, 0, 0.5)";
         sp3dCtx.fillText("SIGNAL LOST", sp3dCanvas.width/2 + 4, sp3dCanvas.height/2);
-        
         sp3dCtx.fillStyle = "rgba(0, 255, 255, 0.5)";
         sp3dCtx.fillText("SIGNAL LOST", sp3dCanvas.width/2 - 4, sp3dCanvas.height/2);
-        
         sp3dCtx.fillStyle = "#fff";
         sp3dCtx.fillText("SIGNAL LOST", sp3dCanvas.width/2, sp3dCanvas.height/2);
-        
         sp3dCtx.font = "16px monospace";
         sp3dCtx.fillStyle = "#ff5252";
         sp3dCtx.fillText("INTERFERENCE DETECTED // HYPERSPACE CONDUIT", sp3dCanvas.width/2, sp3dCanvas.height/2 + 40);
-        
         sp3dCtx.restore();
     }
-    
-    // Скрываем кнопку сканирования во время помех
     btnScanAction.style.display = 'none';
 }
 
 function updateSpectrum() {
     if (!isSpectrumOpen) return;
     
-    // --- ПРОВЕРКА НА ВАРП ---
     if (typeof isWarping !== 'undefined' && isWarping) {
         drawWarpStatic();
         return; 
     }
 
-    // --- ИСПРАВЛЕНИЕ ЧЕРНОГО ЭКРАНА ---
-    // Если варп кончился, массив звезд пуст (после resetSpectrum), но окно открыто -> создаем звезды заново
     if (stars3D.length === 0) {
         initSpectrum();
     }
-    // ----------------------------------
 
     if (!scan3DState.scanned && btnScanAction.style.display === 'none') {
         btnScanAction.style.display = 'inline-block';
@@ -354,10 +391,51 @@ function updateSpectrum() {
 }
 
 function perform3DScan() {
-    if (scan3DState.active || scan3DState.scanned) return;
-    scan3DState.active = true;
-}
+    if (scan3DState.active) return;
 
+    console.log(">>> [SPECTRUM] Starting deep scan...");
+
+    // Очищаем старые данные о найденных игроках перед новым сканированием
+    stars3D = stars3D.filter(star => !star.isRemotePlayer);
+    scan3DState.scanned = false;
+    scan3DState.radius = 0;
+    scan3DState.active = true;
+
+    // Запускаем свежий поиск игроков в Firebase
+    fetchPlayersForSpectrum();
+}
+function fetchPlayersForSpectrum() {
+    if (typeof window.scanForPlayers !== 'function') return;
+
+    window.scanForPlayers().then(players => {
+        players.forEach(p => {
+            // Создаем узел для каждого найденного игрока
+            const r = Math.random() * 120 + 60; 
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            
+            const x = r * Math.sin(phi) * Math.cos(theta);
+            const y = r * Math.sin(phi) * Math.sin(theta);
+            const z = r * Math.cos(phi);
+
+            const node = new StarNode(x, y, z);
+            node.isRemotePlayer = true; 
+            node.type = 'player';
+            node.revealedType = 'player';
+            node.baseColor = '#d50000';
+            node.color = '#d50000';
+            node.radius = 8; 
+            node.playerData = p; 
+            
+            stars3D.push(node);
+            
+            // Связываем с игроком для прокладывания пути
+            const dist = getDist3D(scan3DState.playerNode, node);
+            scan3DState.playerNode.neighbors.push({ node: node, dist: dist });
+            node.neighbors.push({ node: scan3DState.playerNode, dist: dist });
+        });
+    });
+}
 function checkClick(mx, my) {
     if (!scan3DState.scanned) return;
 
@@ -366,7 +444,10 @@ function checkClick(mx, my) {
 
     stars3D.forEach(star => {
         if (star.isPlayer) return;
-        if (star.type === 'empty' || star.type === 'unknown') return; 
+        
+        // Позволяем кликать на игроков, даже если они не раскрыты полностью (но лучше раскрытые)
+        // Для игроков разрешаем клик
+        if (star.type === 'empty' || (star.type === 'unknown' && !star.isRemotePlayer)) return; 
 
         const dx = mx - star.px;
         const dy = my - star.py;
@@ -385,6 +466,21 @@ function checkClick(mx, my) {
 function calculatePathTo(target) {
     scan3DState.selectedNode = target;
     scan3DState.route = [];
+    
+    // --- СПЕЦИАЛЬНЫЙ ПУТЬ ДЛЯ МУЛЬТИПЛЕЕРА ---
+    if (target.type === 'player' && target.isRemotePlayer) {
+        console.log(">>> [DEBUG] Маршрут к игроку построен:", target.playerData.nickname);
+        window.activeAutopilotRoute = {
+            targetType: 'player',
+            jumpsRequired: 1, 
+            playerNick: target.playerData.nickname,
+            playerData: target.playerData
+        };
+        // Рисуем линию напрямую
+        scan3DState.route = [scan3DState.playerNode, target];
+        return;
+    }
+    // ----------------------------------------
     
     stars3D.forEach(s => { s.gScore = Infinity; s.parent = null; });
     

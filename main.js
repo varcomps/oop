@@ -9,8 +9,11 @@ function initGame() {
     initShip();
     initSpace();
     if (window.initSpectrum) initSpectrum(); 
-    
     if (window.renderStorageGrid) window.renderStorageGrid();
+    
+    // --- ЗАПУСК МУЛЬТИПЛЕЕРА ---
+    if (window.initMultiplayer) initMultiplayer();
+    // ----------------------------
     
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'none';
@@ -292,9 +295,27 @@ function draw() {
              ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width, canvas.height);
          }
     }
-    else if (currentState === STATE_SHIP) { ctx.save(); ctx.translate(viewOffset.x, viewOffset.y); drawInterior(); ctx.restore(); }
-    else if (currentState === STATE_HANGAR) { ctx.save(); ctx.translate(viewOffset.x, viewOffset.y); drawHangar(); ctx.restore(); }
-    else drawMap();
+    else if (currentState === STATE_SHIP) { 
+        ctx.save(); ctx.translate(viewOffset.x, viewOffset.y); drawInterior(); ctx.restore(); 
+    }
+    else if (currentState === STATE_HANGAR) { 
+        ctx.save(); ctx.translate(viewOffset.x, viewOffset.y); drawHangar(); 
+        
+        // --- ОТРИСОВКА ИГРОКОВ В АНГАРЕ ---
+        if (window.drawRemotePlayers) window.drawRemotePlayers(ctx, STATE_HANGAR, viewOffset, TILE_SIZE);
+        // ----------------------------------
+        
+        ctx.restore(); 
+    }
+    else { 
+        drawMap(); 
+        
+        // --- ОТРИСОВКА ИГРОКОВ НА КАРТЕ ---
+        // Для карты offset не нужен (или уже учтен в drawRemotePlayers через translate)
+        if (window.drawRemotePlayers && !isWarping) window.drawRemotePlayers(ctx, STATE_MAP, viewOffset, TILE_SIZE);
+        // ----------------------------------
+    }
+
     if (transition.active) { ctx.fillStyle = `rgba(0, 0, 0, ${transition.alpha})`; ctx.fillRect(0, 0, canvas.width, canvas.height); }
 }
 

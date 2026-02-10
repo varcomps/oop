@@ -78,8 +78,14 @@ window.renderStorageGrid = function() {
             div.classList.add('fuel-style');
             div.style.borderColor = '#ffd700'; 
             div.style.boxShadow = 'inset 0 0 10px rgba(255, 215, 0, 0.3)';
-            // ИЗМЕНЕНИЕ: S-FUEL -> SUPER
             div.innerHTML = '<div class="fuel-charge" style="background:#ffd700; box-shadow:0 0 10px #ffd700;"></div><span class="fuel-label" style="color:#ffd700;">SUPER</span>';
+        }
+        else if (item.type === 'fuel_shift') {
+            // --- СТИЛЬ ДЛЯ SHIFT FUEL ---
+            div.classList.add('fuel-style');
+            div.style.borderColor = '#d50000'; 
+            div.style.boxShadow = 'inset 0 0 10px rgba(255, 23, 68, 0.3)';
+            div.innerHTML = '<div class="fuel-charge" style="background:#ff1744; box-shadow:0 0 10px #ff1744;"></div><span class="fuel-label" style="color:#ff1744;">SHIFT</span>';
         }
         else if (item.type === 'cargo') {
             div.classList.add('cargo-style');
@@ -104,7 +110,9 @@ function renderStorageList() {
     if (isTradeMode) {
         const fuelCost = 0.0001;
         const premiumCost = 0.0005; 
+        const shiftFuelCost = 0.01; // Цена Shift Fuel
 
+        // Обычное топливо
         const btn = document.createElement('div');
         btn.className = 'shop-item-btn';
         btn.innerHTML = `<span>FUEL CELL (2x1)</span><span class="price-tag">${fuelCost} SC</span>`;
@@ -113,15 +121,27 @@ function renderStorageList() {
         };
         storageList.appendChild(btn);
 
+        // Премиум топливо
         const btnPrem = document.createElement('div');
         btnPrem.className = 'shop-item-btn';
         btnPrem.style.borderColor = '#ffd700';
-        // ИЗМЕНЕНИЕ: Название кнопки магазина уже было корректным, оставляем
         btnPrem.innerHTML = `<span style="color:#ffd700">SUPER FUEL (2x1)</span><span class="price-tag">${premiumCost} SC</span>`;
         btnPrem.onclick = () => {
             if (player.credits >= premiumCost) tryAutoBuy('fuel_premium', 2, 1, premiumCost);
         };
         storageList.appendChild(btnPrem);
+
+        // --- НОВОЕ: SHIFT FUEL (Топливо сдвига) ---
+        const btnShift = document.createElement('div');
+        btnShift.className = 'shop-item-btn';
+        btnShift.style.borderColor = '#d50000'; // Темно-красная рамка
+        btnShift.style.background = '#2b0b0b';
+        btnShift.innerHTML = `<span style="color:#ff1744">SHIFT FUEL (1x1)</span><span class="price-tag">${shiftFuelCost} SC</span>`;
+        btnShift.onclick = () => {
+            // Размер 1x1, тип 'fuel_shift'
+            if (player.credits >= shiftFuelCost) tryAutoBuy('fuel_shift', 1, 1, shiftFuelCost);
+        };
+        storageList.appendChild(btnShift);
     }
 }
 

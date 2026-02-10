@@ -1,9 +1,9 @@
 const buildMenu = document.getElementById('buildMenu');
 const hullCountDisplay = document.getElementById('hullCountDisplay');
 
-let shipTiles = [];
-let installedModules = [];
-let detachedTiles = []; 
+window.shipTiles = [];
+window.installedModules = [];
+let detachedTiles = [];
 
 // Таймер для анимации ошибки (мигание)
 let detachAnimTimer = 0; 
@@ -21,25 +21,46 @@ function initShip() {
     startGX = Math.floor(TARGET_COLS / 2) - 2; 
     startGY = Math.floor(TARGET_ROWS / 2) - 4; 
 
-    shipTiles = []; installedModules = [];
+    window.shipTiles = []; window.installedModules = [];
     
+    // Генерируем корпус
     for (let x = 0; x < 4; x++) {
         for (let y = 0; y < 8; y++) {
-            shipTiles.push({x: startGX + x, y: startGY + y});
+            window.shipTiles.push({x: startGX + x, y: startGY + y});
         }
     }
     
+    // Шлюз
     const airlockFloorX = startGX - 1;
     const airlockFloorY = startGY + 3;
-    shipTiles.push({x: airlockFloorX, y: airlockFloorY});
-    shipTiles.push({x: airlockFloorX, y: airlockFloorY + 1});
+    window.shipTiles.push({x: airlockFloorX, y: airlockFloorY});
+    window.shipTiles.push({x: airlockFloorX, y: airlockFloorY + 1});
 
-    installedModules.push({ type: 'engine', x: startGX + 1, y: startGY + 7, w: 2, h: 2 });
-    installedModules.push({ type: 'storage', x: startGX + 1, y: startGY + 4, w: 2, h: 2 });
-    installedModules.push({ type: 'bridge', x: startGX + 1, y: startGY + 1, w: 2, h: 2 });
-    installedModules.push({ type: 'airlock', x: airlockFloorX, y: airlockFloorY, w: 1, h: 2 });
+    // Установка модулей
+    window.installedModules.push({ type: 'engine', x: startGX + 1, y: startGY + 7, w: 2, h: 2 });
+    window.installedModules.push({ type: 'storage', x: startGX + 1, y: startGY + 4, w: 2, h: 2 });
+    window.installedModules.push({ type: 'bridge', x: startGX + 1, y: startGY + 1, w: 2, h: 2 });
+    window.installedModules.push({ type: 'airlock', x: airlockFloorX, y: airlockFloorY, w: 1, h: 2 });
 
-    player.x = (startGX + 2) * TILE_SIZE; player.y = (startGY + 3) * TILE_SIZE;
+    // ПОИСК СВОБОДНОЙ КЛЕТКИ ВОКРУГ МОСТИКА
+    const bridge = window.installedModules.find(m => m.type === 'bridge');
+    if (bridge) {
+        const checkTiles = [
+            { gx: bridge.x + bridge.w, gy: bridge.y },     // Справа
+            { gx: bridge.x - 1, gy: bridge.y },            // Слева
+            { gx: bridge.x, gy: bridge.y - 1 },            // Сверху
+            { gx: bridge.x, gy: bridge.y + bridge.h }      // Снизу
+        ];
+
+        for (let pos of checkTiles) {
+            // Если клетка — это пол и она не занята модулем
+            if (getFloor(pos.gx, pos.gy) && !isTileOccupiedByModule(pos.gx, pos.gy)) {
+                player.x = (pos.gx + 0.5) * TILE_SIZE;
+                player.y = (pos.gy + 0.5) * TILE_SIZE;
+                break; 
+            }
+        }
+    }
 }
 
 function updateBuildUI() {

@@ -89,8 +89,6 @@ function isShipInDockingZone() {
     return Math.hypot(mapShip.x - station.x, mapShip.y - station.y) < station.dockingRadius;
 }
 
-/* sector_station.js - ИСПРАВЛЕНИЕ: Перенос корабля вместе с игроком */
-
 function handleDockingInteraction() {
     if (currentState !== STATE_MAP || currentSystemType !== 'station') return;
     
@@ -103,44 +101,26 @@ function handleDockingInteraction() {
         mapShip.vx = 0; mapShip.vy = 0; 
         
         if (window.hangarSpots && window.hangarSpots.length > 0) {
-            // 1. Выбираем случайный ангар
             const randomHangar = window.hangarSpots[Math.floor(Math.random() * window.hangarSpots.length)];
-            
-            // 2. Вычисляем целевые координаты (центр ангара)
             const targetX = (randomHangar.x + randomHangar.w / 2) * TILE_SIZE;
             const targetY = (randomHangar.y + randomHangar.h / 2) * TILE_SIZE;
-
-            // 3. Считаем смещение (разницу) между текущей позицией и целью
-            // Округляем до целых клеток, чтобы сетка не поехала
             const diffGridX = Math.round((targetX - player.x) / TILE_SIZE);
             const diffGridY = Math.round((targetY - player.y) / TILE_SIZE);
 
-            // 4. Двигаем ИГРОКА
             player.x += diffGridX * TILE_SIZE;
             player.y += diffGridY * TILE_SIZE;
 
-            // 5. Двигаем ВЕСЬ КОРАБЛЬ (стены, пол, модули) вслед за игроком
             if (typeof shipTiles !== 'undefined') {
                 shipTiles.forEach(t => { t.x += diffGridX; t.y += diffGridY; });
             }
             if (typeof installedModules !== 'undefined') {
                 installedModules.forEach(m => { m.x += diffGridX; m.y += diffGridY; });
             }
-            // Двигаем инвентарь (ящики), если они есть
-            if (typeof window.placedStorageItems !== 'undefined') {
-                window.placedStorageItems.forEach(i => { i.x += diffGridX; i.y += diffGridY; }); // Ошибка в логике, storageItems локальны к сетке...
-                // СТОП. В storage.js items привязаны к локальной сетке 10x10? 
-                // Если да, их двигать НЕ НАДО. Если они имеют мировые координаты - надо.
-                // В твоем коде (storage.js) x и y от 0 до 9. Их трогать НЕЛЬЗЯ.
-                // Поэтому этот блок для placedStorageItems НЕ НУЖЕН. Удаляю.
-            }
 
             if (typeof uiHint !== 'undefined') {
                 uiHint.innerHTML = `DOCKED AT: <span style="color:#00e5ff">${randomHangar.name}</span>`;
             }
         } 
-
-        // Переключаем режим, игрок остается в корабле, но корабль теперь в новом месте
         startTransition(STATE_SHIP); 
     }
 }

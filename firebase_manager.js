@@ -81,7 +81,7 @@ async function handleAuth() {
             // ИСПРАВЛЕНИЕ: Стартовый капитал 0.01 (как ты просил)
             updates['users/' + user.uid + '/saveData'] = {
                 credits: 0.01, 
-                hullParts: 20,
+                hullParts: 0,
                 x: 0, y: 0
             };
 
@@ -120,15 +120,21 @@ window.logoutUser = function() {
 };
 
 // Слушатель: когда пользователь входит или выходит
+// Слушатель: когда пользователь входит или выходит
 auth.onAuthStateChanged((user) => {
     if (user) {
-        // УСПЕШНЫЙ ВХОД
+        // --- УСПЕШНЫЙ ВХОД ---
         currentUser = user;
         authModal.style.display = 'none'; 
         console.log("Logged in ID:", user.uid);
         
         // Сброс флага (начало загрузки)
         isGameLoaded = false;
+
+        // === СТРОГАЯ ОЧИСТКА ПРИ РАЗРЫВЕ СОЕДИНЕНИЯ ===
+        // Как только сервер Firebase зафиксирует потерю связи с клиентом (закрытие вкладки, лаг),
+        // он автоматически удалит запись игрока из online_players.
+        db.ref('online_players/' + user.uid).onDisconnect().remove();
         
         // Получаем никнейм для HUD
         db.ref('users/' + user.uid + '/profile/nickname').once('value').then((snapshot) => {
@@ -141,13 +147,22 @@ auth.onAuthStateChanged((user) => {
             }
         });
 
+        // Загружаем прогресс
         loadGameData();
+
+        // Инициализируем сетевой код
+        if (window.initMultiplayer) {
+            console.log("Auth success. Initializing Multiplayer...");
+            window.initMultiplayer();
+        }
+
     } else {
-        // ПОЛЬЗОВАТЕЛЬ НЕ В СИСТЕМЕ
+        // --- ПОЛЬЗОВАТЕЛЬ ВЫШЕЛ ---
+        currentUser = null;
         authModal.style.display = 'flex'; 
         isGameLoaded = false;
         
-        // Сброс UI ника
+        // Сброс UI
         const nickDisplay = document.getElementById('nicknameDisplay');
         if(nickDisplay) nickDisplay.innerText = "PILOT";
         const logoutBtn = document.getElementById('logoutBtn');
@@ -156,17 +171,16 @@ auth.onAuthStateChanged((user) => {
 });
 
 // Глобальная функция сохранения
+/* firebase_manager.js */
+
 window.saveGameData = function() {
     if (!currentUser) return;
     
-    // --- ПРЕДОХРАНИТЕЛЬ: Если игра не загрузилась, не сохраняем "пустые" нули ---
     if (!isGameLoaded) {
         console.warn("Save blocked: Game data not loaded yet.");
         return;
     }
-    // -----------------------------------------------------------------------------
     
-    // Сохраняем визуальные данные (для предотвращения "дешевого" сброса фона)
     let visualData = null;
     if (window.getVisualState) {
         visualData = window.getVisualState();
@@ -176,13 +190,17 @@ window.saveGameData = function() {
         credits: player.credits,
         hullParts: player.hullParts,
         inventory: window.placedStorageItems || [],
+        // СОХРАНЕНИЕ СТРОЕНИЯ КОРАБЛЯ
+        shipStructure: {
+            tiles: window.shipTiles || [],
+            modules: window.installedModules || []
+        },
         worldState: visualData
     };
 
     db.ref('users/' + currentUser.uid + '/saveData').update(dataToSave);
 };
 
-// Функция загрузки данных при старте
 function loadGameData() {
     if (!currentUser) return;
     
@@ -197,27 +215,28 @@ function loadGameData() {
             if (data.credits !== undefined) player.credits = Number(data.credits);
             if (data.hullParts !== undefined) player.hullParts = Number(data.hullParts);
             
-            // Инвентарь
+            // Загрузка инвентаря (предметы на сетке)
             if (data.inventory) {
                 window.placedStorageItems = data.inventory;
                 if(window.renderStorageGrid) window.renderStorageGrid();
             }
+
+            // ЗАГРУЗКА СТРОЕНИЯ КОРАБЛЯ
+            if (data.shipStructure) {
+                if (data.shipStructure.tiles) window.shipTiles = data.shipStructure.tiles;
+                if (data.shipStructure.modules) window.installedModules = data.shipStructure.modules;
+            }
             
-            // Загрузка атмосферы (цвет космоса, тип системы)
             if (data.worldState && window.setVisualState) {
-                console.log("Restoring world state...");
                 window.setVisualState(data.worldState);
             }
             
-            // Обновляем интерфейс
             if(window.updateCurrencyUI) window.updateCurrencyUI();
             if(window.updateBuildUI) window.updateBuildUI();
         }
         
-        // --- РАЗРЕШАЕМ СОХРАНЕНИЕ ТОЛЬКО ПОСЛЕ УСПЕШНОЙ ЗАГРУЗКИ ---
         isGameLoaded = true; 
         console.log("Game fully loaded. Saving enabled.");
-        // -----------------------------------------------------------
         
     }).catch(error => {
         console.error("Error loading data:", error);
