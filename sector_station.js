@@ -1,4 +1,4 @@
-/* sector_station.js - СТРОГОЕ ТЗ: Хаб сверху, комнаты в 3 стороны + Мастерская */
+/* sector_station.js - UPDATED: Exchange Post Added */
 
 let station = { x: 0, y: 0, dockingRadius: 150, visible: true }; 
 let stationTiles = []; 
@@ -80,7 +80,7 @@ function generateStation() {
     window.stationZones.push({ name: "ИНЖЕНЕРНЫЙ ОТСЕК", x: roomUpX, y: roomUpY, w: 4, h: 4 });
     stationModules.push({ type: 'engineering_terminal', x: roomUpX + 1, y: roomUpY + 1, w: 2, h: 2 });
 
-    // --- 7. НОВАЯ КОМНАТА: МАСТЕРСКАЯ (Слева от коридора) ---
+    // --- 7. КОМНАТА: МАСТЕРСКАЯ (Слева от коридора) ---
     // Коридор находится примерно на X=28..31. Делаем ответвление влево.
     const craftRoomX = centerX - 8; // Смещаем влево от центра
     const craftRoomY = 12; // По вертикали посередине коридора
@@ -93,6 +93,27 @@ function generateStation() {
     window.stationZones.push({ name: "МАСТЕРСКАЯ", x: craftRoomX, y: craftRoomY, w: 4, h: 4 });
     // Добавляем терминал крафта
     stationModules.push({ type: 'crafting_terminal', x: craftRoomX + 1, y: craftRoomY + 1, w: 2, h: 2 });
+
+    // --- 8. НОВАЯ КОМНАТА: ЗОНА ОБМЕНА (Справа от коридора) ---
+    // Смещаем вправо от центра, напротив мастерской
+    const tradeRoomX = centerX + 4; 
+    const tradeRoomY = 12; // Та же высота Y=12
+    
+    // Комната 4x4
+    fillRect(tradeRoomX, tradeRoomY, 4, 4);
+    // Проход влево к коридору
+    fillRect(tradeRoomX - 2, tradeRoomY + 1, 2, 2);
+
+    window.stationZones.push({ name: "ЗОНА ОБМЕНА", x: tradeRoomX, y: tradeRoomY, w: 4, h: 4 });
+    
+    // Добавляем терминал обмена (модуль)
+    stationModules.push({ 
+        type: 'exchange_post', 
+        x: tradeRoomX + 1, 
+        y: tradeRoomY + 1, 
+        w: 2, 
+        h: 2 
+    });
 }
 
 function isShipInDockingZone() {

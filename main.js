@@ -220,39 +220,48 @@ function update() {
             else if (interactables.airlock.active && !isDocked) hintText = "<span style='color:red'>ШЛЮЗ ЗАБЛОКИРОВАН (НЕТ СТЫКОВКИ)</span>";
             
             if (!isAnyUIOpen) uiHint.innerHTML = hintText; else uiHint.innerHTML = "";
-        } else {
-             const airlock = installedModules.find(m => m.type === 'airlock');
-             let nearShip = airlock && Math.hypot(player.x - (airlock.x + airlock.w/2) * TILE_SIZE, player.y - (airlock.y + airlock.h/2) * TILE_SIZE) < TILE_SIZE * 2.5;
-             const trade = stationModules.find(m => m.type === 'trade_post');
-             interactables.tradePost.active = trade && Math.hypot(player.x - (trade.x + trade.w/2) * TILE_SIZE, player.y - (trade.y + trade.h/2) * TILE_SIZE) < TILE_SIZE * 2;
-             
-             const eng = stationModules.find(m => m.type === 'engineering_terminal');
-             interactables.engineering.active = eng && Math.hypot(player.x - (eng.x + eng.w/2) * TILE_SIZE, player.y - (eng.y + eng.h/2) * TILE_SIZE) < TILE_SIZE * 2;
-             
-             const comm = stationModules.find(m => m.type === 'commodities_terminal');
-             interactables.commodities.active = comm && Math.hypot(player.x - (comm.x + comm.w/2) * TILE_SIZE, player.y - (comm.y + comm.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+            } else {
+            // --- РЕЖИМ АНГАРА / СТАНЦИИ ---
+            const airlock = installedModules.find(m => m.type === 'airlock');
+            let nearShip = airlock && Math.hypot(player.x - (airlock.x + airlock.w/2) * TILE_SIZE, player.y - (airlock.y + airlock.h/2) * TILE_SIZE) < TILE_SIZE * 2.5;
+            
+            const trade = stationModules.find(m => m.type === 'trade_post');
+            interactables.tradePost.active = trade && Math.hypot(player.x - (trade.x + trade.w/2) * TILE_SIZE, player.y - (trade.y + trade.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+            
+            const eng = stationModules.find(m => m.type === 'engineering_terminal');
+            interactables.engineering.active = eng && Math.hypot(player.x - (eng.x + eng.w/2) * TILE_SIZE, player.y - (eng.y + eng.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+            
+            const comm = stationModules.find(m => m.type === 'commodities_terminal');
+            interactables.commodities.active = comm && Math.hypot(player.x - (comm.x + comm.w/2) * TILE_SIZE, player.y - (comm.y + comm.h/2) * TILE_SIZE) < TILE_SIZE * 2;
 
-             const craft = stationModules.find(m => m.type === 'crafting_terminal');
-             interactables.crafting = interactables.crafting || { active: false };
-             interactables.crafting.active = craft && Math.hypot(player.x - (craft.x + craft.w/2) * TILE_SIZE, player.y - (craft.y + craft.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+            // КРАФТ (Инициализация)
+            const craft = stationModules.find(m => m.type === 'crafting_terminal');
+            interactables.crafting = interactables.crafting || { active: false }; // Защита от undefined
+            interactables.crafting.active = craft && Math.hypot(player.x - (craft.x + craft.w/2) * TILE_SIZE, player.y - (craft.y + craft.h/2) * TILE_SIZE) < TILE_SIZE * 2;
 
-             if (!isAnyUIOpen) {
-                 if (nearShip) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРНУТЬСЯ НА КОРАБЛЬ";
-                 else if (interactables.tradePost.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОРГОВЛЯ";
-                 else if (interactables.engineering.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ИНЖЕНЕРНЫЙ ТЕРМИНАЛ";
-                 else if (interactables.commodities.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОВАРНЫЙ РЫНОК";
-                 else if (interactables.crafting.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРСТАК";
-                 else {
-                     let roomName = "СТАНЦИЯ";
-                     const gx = Math.floor(player.x / TILE_SIZE);
-                     const gy = Math.floor(player.y / TILE_SIZE);
-                     if (window.stationZones) {
-                         const zone = window.stationZones.find(z => gx >= z.x && gx < z.x + z.w && gy >= z.y && gy < z.y + z.h);
-                         if (zone) roomName = zone.name;
-                     }
-                     uiHint.innerHTML = roomName;
-                 }
-             } else uiHint.innerHTML = "";
+            // ОБМЕН (Инициализация) - ВАЖНО! Эту часть вы могли пропустить
+            const exch = stationModules.find(m => m.type === 'exchange_post');
+            interactables.exchange = interactables.exchange || { active: false }; // Создаем объект, если его нет
+            interactables.exchange.active = exch && Math.hypot(player.x - (exch.x + exch.w/2) * TILE_SIZE, player.y - (exch.y + exch.h/2) * TILE_SIZE) < TILE_SIZE * 2;
+
+            if (!isAnyUIOpen) {
+                if (nearShip) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРНУТЬСЯ НА КОРАБЛЬ";
+                else if (interactables.tradePost.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОРГОВЛЯ";
+                else if (interactables.engineering.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ИНЖЕНЕРНЫЙ ТЕРМИНАЛ";
+                else if (interactables.commodities.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ТОВАРНЫЙ РЫНОК";
+                else if (interactables.crafting.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ВЕРСТАК";
+                else if (interactables.exchange.active) uiHint.innerHTML = "<span class='hl'>[ E ]</span> ОБМЕН ПРЕДМЕТАМИ";
+                else {
+                    let roomName = "СТАНЦИЯ";
+                    const gx = Math.floor(player.x / TILE_SIZE);
+                    const gy = Math.floor(player.y / TILE_SIZE);
+                    if (window.stationZones) {
+                        const zone = window.stationZones.find(z => gx >= z.x && gx < z.x + z.w && gy >= z.y && gy < z.y + z.h);
+                        if (zone) roomName = zone.name;
+                    }
+                    uiHint.innerHTML = roomName;
+                }
+            } else uiHint.innerHTML = "";
         }
 
     } else if (currentState === STATE_MAP) {
@@ -358,6 +367,7 @@ canvas.addEventListener('mousemove', e => {
 canvas.addEventListener('mouseup', () => { isMouseDown = false; isRightMouseDown = false; });
 canvas.addEventListener('mouseleave', () => { isMouseDown = false; isRightMouseDown = false; });
 
+
 window.addEventListener('keydown', (e) => {
     // ЕСЛИ ВВОДИМ ТЕКСТ В INPUT - ИГНОРИРУЕМ ИГРОВЫЕ КЛАВИШИ
     if (document.activeElement && document.activeElement.tagName === 'INPUT') {
@@ -407,7 +417,19 @@ window.addEventListener('keydown', (e) => {
         return; 
     }
 
-    // 5. Меню строительства (Escape закрывает его)
+    // 5. Крафт (Верстак)
+    if (typeof isCraftingOpen !== 'undefined' && isCraftingOpen) {
+        if (e.code === 'Escape' || e.code === 'KeyE') { window.toggleCrafting(false); return; }
+        return;
+    }
+
+    // 6. Обмен (Trade) - НОВОЕ
+    if (typeof isTradeActive !== 'undefined' && isTradeActive) {
+        if (e.code === 'Escape') { window.closeTradeSession(); return; }
+        return;
+    }
+
+    // 7. Меню строительства (Escape закрывает его)
     if (e.code === 'Escape') {
         if (selectedBuildItem) { if (movingOriginalState) { installedModules.push(movingOriginalState); movingOriginalState = null; } clearCursor(); return; }
         
@@ -476,11 +498,14 @@ window.addEventListener('keydown', (e) => {
                 if (interactables.bridge.active) startTransition(STATE_MAP);
                 else if (interactables.storage.active) toggleStorage(true, false);
                 else if (interactables.airlock.active && isDocked) startTransition(STATE_HANGAR);
-            } else if (currentState === STATE_MAP && !isWarping) { 
+            } 
+            else if (currentState === STATE_MAP && !isWarping) { 
                 startTransition(STATE_SHIP); 
-            } else if (currentState === STATE_HANGAR) {
+            } 
+            else if (currentState === STATE_HANGAR) {
                  const airlock = installedModules.find(m => m.type === 'airlock');
                  if (airlock && Math.hypot(player.x - (airlock.x+airlock.w/2)*TILE_SIZE, player.y - (airlock.y+airlock.h/2)*TILE_SIZE) < TILE_SIZE*2.5) startTransition(STATE_SHIP);
+                 
                  if (interactables.tradePost.active) toggleStorage(true, true);
                  if (interactables.commodities.active) toggleMarket(true);
                  if (interactables.engineering.active) {
@@ -488,7 +513,12 @@ window.addEventListener('keydown', (e) => {
                      tryToggleBuildMenu(); 
                  }
                  if (interactables.crafting && interactables.crafting.active) {
-                    window.toggleCrafting(true); // Заменяем console.log на открытие интерфейса
+                    if (window.toggleCrafting) window.toggleCrafting(true);
+                 }
+                 
+                 // --- НОВОЕ: ОТКРЫТИЕ ОБМЕНА ---
+                 if (interactables.exchange && interactables.exchange.active) {
+                    if (window.tryOpenTrade) window.tryOpenTrade();
                  }
             }
             break;
@@ -561,6 +591,20 @@ function drawHangar() {
             ctx.font = "bold 12px Orbitron"; ctx.fillStyle = "#ff5722"; ctx.textAlign = "center";
             ctx.fillText("CRAFT", x + w/2, y + h/2 - 5); 
             ctx.fillText("UNIT", x + w/2, y + h/2 + 15);
+        }
+        if (mod.type === 'exchange_post') {
+            const x = mod.x * TILE_SIZE; const y = mod.y * TILE_SIZE; const w = mod.w * TILE_SIZE; const h = mod.h * TILE_SIZE;
+            ctx.fillStyle = '#212121'; ctx.fillRect(x, y, w, h);
+            // Визуальный стиль: Желто-пунктирный
+            ctx.strokeStyle = (interactables.exchange && interactables.exchange.active) ? '#ffab00' : '#ff6f00'; 
+            ctx.lineWidth = 2; 
+            ctx.setLineDash([5, 5]); // Пунктирная обводка
+            ctx.strokeRect(x,y,w,h);
+            ctx.setLineDash([]); // Сброс
+            
+            ctx.font = "bold 10px Orbitron"; ctx.fillStyle = "#ffab00"; ctx.textAlign = "center";
+            ctx.fillText("P2P", x + w/2, y + h/2 - 5); 
+            ctx.fillText("TRADE", x + w/2, y + h/2 + 15);
         }
     });
     
