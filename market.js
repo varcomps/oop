@@ -1,4 +1,4 @@
-/* market.js */
+/* market.js - Обновленная версия: независимые шансы на покупку и продажу */
 
 const marketUI = document.getElementById('marketUI');
 const marketListContainer = document.getElementById('marketList');
@@ -17,7 +17,7 @@ const COMMODITY_DB = [
     { id: 'c04', name: 'Hydrogen',      base: 0.0002, min: 0.0001,  max: 0.0008, step: 0.00005, w: 1, h: 1 },
     { id: 'c05', name: 'Silica Sand',   base: 0.0001, min: 0.00005, max: 0.0005, step: 0.00005, w: 1, h: 1 },
     { id: 'c06', name: 'Copper Ore',    base: 0.0003, min: 0.0001,  max: 0.0009, step: 0.0001,  w: 1, h: 1 },
-    { id: 'c07', name: 'Aluminium',     base: 0.0003, min: 0.0002,  max: 0.0010, step: 0.0001,  w: 1, h: 1 },
+    { id: 'c07', name: 'Aluminium',     base: 0.0003, min: 0.0002,  max: 0.0100, step: 0.0001,  w: 1, h: 1 },
     { id: 'c08', name: 'Titanium Ore',  base: 0.0005, min: 0.0003,  max: 0.0015, step: 0.0001,  w: 1, h: 1 },
     { id: 'c09', name: 'Biomass',       base: 0.0004, min: 0.0002,  max: 0.0120, step: 0.0001,  w: 1, h: 1 },
     { id: 'c10', name: 'Scrap Metal',   base: 0.0001, min: 0.00001, max: 0.0003, step: 0.00002, w: 1, h: 1 },
@@ -35,7 +35,7 @@ const COMMODITY_DB = [
     { id: 'c22', name: 'Solar Cells',   base: 0.0060, min: 0.0040,  max: 0.0120, step: 0.0010,  w: 3, h: 2 },
     { id: 'c23', name: 'Batteries',     base: 0.0055, min: 0.0035,  max: 0.0110, step: 0.0010,  w: 2, h: 2 },
     { id: 'c24', name: 'Sensor Arrays', base: 0.0080, min: 0.0050,  max: 0.0150, step: 0.0015,  w: 3, h: 2 },
-    { id: 'c25', name: 'Drones',        base: 0.0100, min: 0.0060,  max: 0.0200, step: 0.0020,  w: 2, h: 2 },
+    { id: 'c25', name: 'Drones',        base: 0.0100, min: 0.0060,  max: 0.0200, step: 0.0200,  w: 2, h: 2 },
     { id: 'c26', name: 'Med-Gel',       base: 0.0090, min: 0.0050,  max: 0.0180, step: 0.0015,  w: 1, h: 2 },
     { id: 'c27', name: 'Engine Parts',  base: 0.0120, min: 0.0080,  max: 0.0250, step: 0.0020,  w: 4, h: 2 },
     { id: 'c28', name: 'Shield Gen',    base: 0.0150, min: 0.0100,  max: 0.0300, step: 0.0025,  w: 3, h: 2 },
@@ -65,7 +65,7 @@ const COMMODITY_DB = [
 
 let marketState = {
     items: [],
-    stationStock: { sell: [], buy: [] },
+    stationStock: { sell: {}, buy: {} },
     selectedId: null
 };
 
@@ -85,7 +85,6 @@ function initMarket() {
         };
     }
 
-    // Генерация с нуля (если не загрузили сохранение)
     marketState.items = COMMODITY_DB.map(c => {
         let history = [];
         let current = c.base;
@@ -143,15 +142,28 @@ function updateGlobalPrices(freezePrices = false) {
 }
 
 function generateStationInventory() {
-    marketState.stationStock.sell = [];
-    marketState.stationStock.buy = [];
-    let indices = Array.from({length: 50}, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    for(let i=0; i<5; i++) marketState.stationStock.sell.push(marketState.items[indices[i]].id);
-    for(let i=5; i<15; i++) marketState.stationStock.buy.push(marketState.items[indices[i]].id);
+    marketState.stationStock.sell = {};
+    marketState.stationStock.buy = {};
+    
+    marketState.items.forEach((item, index) => {
+        let chance = 0, minQ = 0, maxQ = 0;
+
+        if (index < 10) { chance = 0.8; minQ = 15; maxQ = 30; }
+        else if (index < 20) { chance = 0.6; minQ = 10; maxQ = 20; }
+        else if (index < 30) { chance = 0.4; minQ = 8; maxQ = 16; }
+        else if (index < 40) { chance = 0.3; minQ = 5; maxQ = 10; }
+        else if (index < 50) { chance = 0.2; minQ = 4; maxQ = 8; }
+
+        // Независимый шанс для продажи (станция -> игрок)
+        if (Math.random() < chance) {
+            marketState.stationStock.sell[item.id] = Math.floor(Math.random() * (maxQ - minQ + 1)) + minQ;
+        }
+
+        // Независимый шанс для покупки (игрок -> станция)
+        if (Math.random() < chance) {
+            marketState.stationStock.buy[item.id] = Math.floor(Math.random() * (maxQ - minQ + 1)) + minQ;
+        }
+    });
 }
 
 function toggleMarket(show) {
@@ -187,8 +199,8 @@ function renderMarketList() {
         if (item.id === marketState.selectedId) div.classList.add('selected');
         
         let status = '';
-        if (marketState.stationStock.sell.includes(item.id)) status = '<span class="status-sell">SELL</span>';
-        if (marketState.stationStock.buy.includes(item.id)) status = '<span class="status-buy">BUY</span>';
+        if (marketState.stationStock.sell[item.id] > 0) status += '<span class="status-sell" style="margin-right:2px">SELL</span>';
+        if (marketState.stationStock.buy[item.id] > 0) status += '<span class="status-buy">BUY</span>';
 
         const prev = item.history[item.history.length - 2] || item.price;
         const diff = item.price - prev;
@@ -255,13 +267,18 @@ function setTradeStatus(msg, color) {
 
 function updateTradePanel(item) {
     if(!tradePanel) return;
-    const canBuy = marketState.stationStock.sell.includes(item.id);
-    const canSell = marketState.stationStock.buy.includes(item.id);
+    const sellStock = marketState.stationStock.sell[item.id] || 0;
+    const buyDemand = marketState.stationStock.buy[item.id] || 0;
+    const canBuy = sellStock > 0;
+    const canSell = buyDemand > 0;
     const playerAmount = countPlayerCargo(item.id);
 
     let html = `<div class="tp-header">${item.name}</div>`;
     html += `<div class="tp-info">PRICE: <span style="color:#ffd700">${item.price.toFixed(5)} SC</span></div>`;
-    // ДИНАМИЧЕСКИЙ РАЗМЕР:
+    
+    if (canBuy) html += `<div class="tp-info">STATION STOCK: <span style="color:#00e5ff">${sellStock}</span></div>`;
+    if (canSell) html += `<div class="tp-info">STATION DEMAND: <span style="color:#ea80fc">${buyDemand}</span></div>`;
+
     html += `<div class="tp-info">SIZE: ${item.w}x${item.h} CRATE</div>`; 
     html += `<div class="tp-info">OWNED: ${playerAmount}</div>`;
     html += `<div class="tp-actions">`;
@@ -288,7 +305,6 @@ function drawGraph(item, hoverX) {
     
     marketCtx.clearRect(0, 0, w, h);
 
-    // Сетка
     marketCtx.strokeStyle = '#222';
     marketCtx.lineWidth = 1;
     marketCtx.beginPath();
@@ -385,11 +401,18 @@ function tradeTransaction(id, action) {
     if (!item) return;
 
     if (action === 'buy') {
+        const stock = marketState.stationStock.sell[id] || 0;
+        if (stock <= 0) {
+            setTradeStatus("STATION OUT OF STOCK", "#ff1744");
+            return;
+        }
+
         if (player.credits >= item.price) {
-            // ПЕРЕДАЕМ РАЗМЕРЫ ТОВАРА:
             if (tryAutoBuyCargo(id, item.name, item.price, item.w, item.h)) {
+                marketState.stationStock.sell[id]--; 
                 setTradeStatus(`BOUGHT ${item.name}`, "#00e676");
                 updateTradePanel(item);
+                renderMarketList();
                 window.renderMarketGrid(); 
             } else {
                 setTradeStatus(`NOT ENOUGH SPACE (${item.w}x${item.h})`, "#ff1744");
@@ -399,15 +422,23 @@ function tradeTransaction(id, action) {
         }
     } 
     else if (action === 'sell') {
+        const demand = marketState.stationStock.buy[id] || 0;
+        if (demand <= 0) {
+            setTradeStatus("STATION NO LONGER BUYING", "#ff1744");
+            return;
+        }
+
         const idx = window.placedStorageItems.findIndex(i => i.type === 'cargo' && i.commodityId === id);
         if (idx !== -1) {
             window.placedStorageItems.splice(idx, 1);
             player.credits += item.price;
+            marketState.stationStock.buy[id]--; 
             updateCurrencyUI();
             
             if(window.renderStorageGrid) window.renderStorageGrid(); 
             window.renderMarketGrid(); 
             updateTradePanel(item);
+            renderMarketList();
             setTradeStatus(`SOLD ${item.name}`, "#d500f9");
         } else {
             setTradeStatus("YOU DON'T HAVE THIS", "#ff1744");
@@ -418,7 +449,6 @@ function tradeTransaction(id, action) {
 function tryAutoBuyCargo(id, name, cost, w, h) {
     if (!window.isOccupied) return false;
     
-    // Циклы учитывают размер предмета, чтобы он не вылез за край сетки (10x10)
     for(let y = 0; y <= 10 - h; y++) { 
         for(let x = 0; x <= 10 - w; x++) { 
             if (!window.isOccupied(x, y, w, h)) {
@@ -427,7 +457,7 @@ function tryAutoBuyCargo(id, name, cost, w, h) {
                 window.placedStorageItems.push({ 
                     x: x, y: y, 
                     type: 'cargo', 
-                    w: w, h: h, // СОХРАНЯЕМ РАЗМЕР В ОБЪЕКТ
+                    w: w, h: h, 
                     commodityId: id, 
                     name: name
                 });
@@ -439,31 +469,16 @@ function tryAutoBuyCargo(id, name, cost, w, h) {
     return false;
 }
 
-// --- НОВЫЕ ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ РЫНКА ---
-
-// 1. Экспорт данных для сохранения в Firebase
 window.getMarketSaveData = function() {
     return {
-        // Сохраняем все товары с их текущими ценами и историей
         items: marketState.items,
-        // Сохраняем списки того, что станция продает и покупает
         stock: marketState.stationStock
     };
 };
 
-// 2. Импорт данных при загрузке игры
 window.restoreMarketSaveData = function(data) {
     if (!data) return;
-    
-    // Восстанавливаем товары (цены, история для графиков)
-    if (data.items) {
-        marketState.items = data.items;
-    }
-    
-    // Восстанавливаем ассортимент станции
-    if (data.stock) {
-        marketState.stationStock = data.stock;
-    }
-    
+    if (data.items) marketState.items = data.items;
+    if (data.stock) marketState.stationStock = data.stock;
     console.log("Market data restored.");
 };

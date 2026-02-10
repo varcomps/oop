@@ -20,8 +20,6 @@ let btnErrorTimer = 0;
 let autoJumpState = { active: false, jumpsLeft: 0, finalTargetType: null, usePremium: false, targetPlayerData: null };
 
 function startAutoJumpSequence(count, targetType, usePremium = false, targetPlayerData = null) {
-    console.log(`>>> [DEBUG] startAutoJumpSequence: Цель=${targetType}, Прыжков=${count}, Игрок=${targetPlayerData ? targetPlayerData.nickname : 'нет'}`);
-    
     if (autoJumpState.active) return;
     
     if (isDocked) {
@@ -31,29 +29,46 @@ function startAutoJumpSequence(count, targetType, usePremium = false, targetPlay
         return;
     }
 
-    const fuelAvailable = usePremium ? window.getPremiumFuelCount() : window.getFuelCount();
-
-    if (fuelAvailable < count) {
-        const btn = usePremium ? jumpBtnPremium : jumpBtn;
-        if(btn) {
+    // ЛОГИКА ДЛЯ ПРЫЖКА К ИГРОКУ (ТРЕБУЕТСЯ ТОЛЬКО 1 SHIFT FUEL)
+    if (targetType === 'player') {
+        if (window.getShiftFuelCount() < 1) {
+            const btn = jumpBtn;
             const oldText = btn.innerHTML;
-            btn.innerHTML = "НЕТ ТОПЛИВА";
+            btn.innerHTML = "НУЖЕН SHIFT FUEL";
             btn.style.color = "#ff1744";
-            btn.style.borderColor = "#ff1744";
             setTimeout(() => { 
                 btn.innerHTML = oldText; 
-                btn.style.color = usePremium ? "#ffd700" : "#ff5252"; 
-                btn.style.borderColor = usePremium ? "#ffd700" : "#ff5252";
+                btn.style.color = "#ff5252"; 
             }, 1500);
+            return;
         }
-        return;
+        // Для прыжка к другу всегда фиксируем 1 списание
+        count = 1;
+    } else {
+        const fuelAvailable = usePremium ? window.getPremiumFuelCount() : window.getFuelCount();
+
+        if (fuelAvailable < count) {
+            const btn = usePremium ? jumpBtnPremium : jumpBtn;
+            if(btn) {
+                const oldText = btn.innerHTML;
+                btn.innerHTML = "НЕТ ТОПЛИВА";
+                btn.style.color = "#ff1744";
+                btn.style.borderColor = "#ff1744";
+                setTimeout(() => { 
+                    btn.innerHTML = oldText; 
+                    btn.style.color = usePremium ? "#ffd700" : "#ff5252"; 
+                    btn.style.borderColor = usePremium ? "#ffd700" : "#ff5252";
+                }, 1500);
+            }
+            return;
+        }
     }
 
     autoJumpState.active = true;
     autoJumpState.jumpsLeft = count;
     autoJumpState.finalTargetType = targetType;
     autoJumpState.usePremium = usePremium; 
-    autoJumpState.targetPlayerData = targetPlayerData; // СТРОГО: Сохраняем данные игрока для финального прыжка
+    autoJumpState.targetPlayerData = targetPlayerData; 
     
     initiateHyperJump(true, autoJumpState.usePremium); 
 }
@@ -71,14 +86,18 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
         btnErrorTimer = 60; return; 
     }
 
-    // Если это ручной запуск, но есть проложенный маршрут в Спектре
     if (!isAuto && window.activeAutopilotRoute) {
         const route = window.activeAutopilotRoute;
-        console.log(">>> [DEBUG] Запуск маршрута из Спектра к:", route.targetType);
         startAutoJumpSequence(route.jumpsRequired, route.targetType, usePremium, route.playerData);
         return;
     }
     
+    // ОПРЕДЕЛЯЕМ ТИП ТОПЛИВА ДЛЯ СПИСАНИЯ
+    let fuelTypeToConsume = usePremium ? 'premium' : 'normal';
+    if (autoJumpState.active && autoJumpState.finalTargetType === 'player') {
+        fuelTypeToConsume = 'shift';
+    }
+
     if (!isAuto) {
         let hasFuel = false;
         if (usePremium) {
@@ -94,7 +113,7 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
     }
 
     if (window.consumeSpecificFuel) {
-        window.consumeSpecificFuel(usePremium ? 'premium' : 'normal');
+        window.consumeSpecificFuel(fuelTypeToConsume);
     } else {
         consumeFuel(1);
     }
@@ -102,15 +121,11 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
     if (isAuto && autoJumpState.active) {
         autoJumpState.jumpsLeft--;
     }
-    // СИГНАЛ МУЛЬТИПЛЕЕРУ: Мы уходим!
-    if (window.handleWarpLeave) {
-        window.handleWarpLeave();
-    }
+    
+    if (window.handleWarpLeave) window.handleWarpLeave();
     isWarping = true; 
     
-    if (window.clearRadioChoices) {
-        window.clearRadioChoices();
-    }
+    if (window.clearRadioChoices) window.clearRadioChoices();
 
     warpState.phase = WARP_CHARGE; 
     warpState.timer = 0; 
@@ -119,7 +134,8 @@ function initiateHyperJump(isAuto = false, usePremium = false) {
     chargeContainer.style.display = 'block';
     
     let barColor = '#00e5ff';
-    if (usePremium) barColor = '#ffd700';
+    if (fuelTypeToConsume === 'shift') barColor = '#ff1744';
+    else if (usePremium) barColor = '#ffd700';
     else if (isAuto) barColor = '#d500f9';
     
     chargeBar.style.backgroundColor = barColor;
@@ -160,6 +176,7 @@ function updateWarpLogic() {
         } else {
             const fuel = getFuelCount();
             const premFuel = window.getPremiumFuelCount ? window.getPremiumFuelCount() : 0;
+            const shiftFuel = window.getShiftFuelCount ? window.getShiftFuelCount() : 0;
             
             if (fuel > 0) jumpBtn.disabled = false;
             else { jumpBtn.disabled = true; jumpBtn.style.removeProperty('border-color'); }
@@ -172,29 +189,40 @@ function updateWarpLogic() {
             if (window.activeAutopilotRoute) {
                  const jumps = window.activeAutopilotRoute.jumpsRequired;
                  let target = window.activeAutopilotRoute.targetType;
-                 if (target === 'station') target = 'СТАНЦИЯ';
-                 else if (target === 'system') target = 'СИСТЕМА';
-                 else if (target === 'black_hole') target = 'ДЫРА';
-                 else if (target === 'player') target = 'ПИЛОТ';
-                 else target = target.toUpperCase();
                  
-                 if (fuel >= jumps) {
-                     jumpBtn.innerHTML = `АВТОПИЛОТ: ${target} (${jumps})`;
-                     jumpBtn.style.borderColor = "#d500f9"; jumpBtn.style.color = "#ea80fc";
+                 // ЛОГИКА ОТОБРАЖЕНИЯ ПРИ ПРЫЖКЕ К ИГРОКУ
+                 if (target === 'player') {
+                     if (shiftFuel >= 1) {
+                         jumpBtn.innerHTML = `ПЕРЕХОД К ПИЛОТУ`;
+                         jumpBtn.style.borderColor = "#ff1744"; jumpBtn.style.color = "#ff1744";
+                         jumpBtn.disabled = false;
+                     } else {
+                         jumpBtn.innerHTML = `НУЖЕН SHIFT FUEL`;
+                         jumpBtn.style.borderColor = "#444"; jumpBtn.style.color = "#555";
+                         jumpBtn.disabled = true;
+                     }
                  } else {
-                     jumpBtn.innerHTML = `НУЖНО ТОПЛИВО (${fuel}/${jumps})`;
-                     jumpBtn.style.borderColor = "#ff1744"; jumpBtn.style.color = "#ff1744"; jumpBtn.disabled = true;
+                     if (target === 'station') target = 'СТАНЦИЯ';
+                     else if (target === 'system') target = 'СИСТЕМА';
+                     else if (target === 'black_hole') target = 'ДЫРА';
+                     else target = target.toUpperCase();
+                     
+                     if (fuel >= jumps) {
+                         jumpBtn.innerHTML = `АВТОПИЛОТ: ${target} (${jumps})`;
+                         jumpBtn.style.borderColor = "#d500f9"; jumpBtn.style.color = "#ea80fc";
+                     } else {
+                         jumpBtn.innerHTML = `НУЖНО ТОПЛИВО (${fuel}/${jumps})`;
+                         jumpBtn.style.borderColor = "#ff1744"; jumpBtn.style.color = "#ff1744"; jumpBtn.disabled = true;
+                     }
                  }
 
                  if(jumpBtnPremium) {
                      if (premFuel >= jumps) {
                          jumpBtnPremium.innerHTML = `С-ПИЛОТ: ${target}`;
                          jumpBtnPremium.style.borderColor = "#ffd700"; jumpBtnPremium.style.color = "#ffd700";
-                         const sub = jumpBtnPremium.querySelector('.btn-sub');
-                         if(sub) { sub.innerText = `(${jumps}) ЗАМОРОЖЕНО`; sub.style.color = "#fff"; }
                      } else {
                          jumpBtnPremium.innerHTML = `НЕТ ТОПЛИВА`;
-                         jumpBtnPremium.style.borderColor = "#ff1744"; jumpBtnPremium.style.color = "#ff1744"; jumpBtnPremium.disabled = true;
+                         jumpBtnPremium.style.borderColor = "#444"; jumpBtnPremium.style.color = "#555"; jumpBtnPremium.disabled = true;
                      }
                  }
             } else {

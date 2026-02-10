@@ -201,6 +201,8 @@ window.saveGameData = function() {
     db.ref('users/' + currentUser.uid + '/saveData').update(dataToSave);
 };
 
+/* firebase_manager.js */
+
 function loadGameData() {
     if (!currentUser) return;
     
@@ -215,35 +217,42 @@ function loadGameData() {
             if (data.credits !== undefined) player.credits = Number(data.credits);
             if (data.hullParts !== undefined) player.hullParts = Number(data.hullParts);
             
-            // Загрузка инвентаря (предметы на сетке)
             if (data.inventory) {
                 window.placedStorageItems = data.inventory;
-                if(window.renderStorageGrid) window.renderStorageGrid();
             }
 
-            // ЗАГРУЗКА СТРОЕНИЯ КОРАБЛЯ
+            // Загрузка структуры
             if (data.shipStructure) {
                 if (data.shipStructure.tiles) window.shipTiles = data.shipStructure.tiles;
                 if (data.shipStructure.modules) window.installedModules = data.shipStructure.modules;
             }
             
+            // ПРИНУДИТЕЛЬНОЕ ПОЗИЦИОНИРОВАНИЕ ИГРОКА (до завершения загрузки)
+            if (window.placePlayerInShip) window.placePlayerInShip();
+
             if (data.worldState && window.setVisualState) {
                 window.setVisualState(data.worldState);
             }
             
+            if(window.renderStorageGrid) window.renderStorageGrid();
             if(window.updateCurrencyUI) window.updateCurrencyUI();
             if(window.updateBuildUI) window.updateBuildUI();
+        } else {
+            // ЕСЛИ СОХРАНЕНИЯ НЕТ — СОЗДАЕМ БАЗОВЫЙ КОРАБЛЬ
+            if (window.initShip) window.initShip();
         }
         
+        // Только теперь разрешаем игру
         isGameLoaded = true; 
         console.log("Game fully loaded. Saving enabled.");
         
     }).catch(error => {
         console.error("Error loading data:", error);
+        isGameLoaded = true; // Чтобы не блокировать игру при ошибке сети
     });
 }
 
-// --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОИСКА ИГРОКА ---
+
 window.findUserByNickname = async function(nickname) {
     if (!nickname) return null;
     try {

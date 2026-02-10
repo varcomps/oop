@@ -22,12 +22,11 @@ function initMultiplayer() {
     subscribeToCurrentSystem();
 }
 
+/* В multiplayer.js -> функция sendMyStatus */
 function sendMyStatus() {
     const user = firebase.auth().currentUser;
     if (!user) return;
 
-    // СТРОГО: Если мы в варпе, мы ВООБЩЕ не отправляем данные в online_players
-    // Это предотвращает появление игрока в списках во время полета
     if (typeof isWarping !== 'undefined' && isWarping) return;
 
     const nickElem = document.getElementById('nicknameDisplay');
@@ -38,6 +37,12 @@ function sendMyStatus() {
         timestamp: firebase.database.ServerValue.TIMESTAMP,
         currentSystemId: mpState.currentSystemId,
         locationMode: currentState,
+        isMoving: !!(inputs.up || inputs.down || inputs.left || inputs.right),
+        // ПЕРЕДАЕМ РЕАЛЬНУЮ СТРУКТУРУ КОРАБЛЯ
+        shipStructure: {
+            tiles: window.shipTiles || [],
+            modules: window.installedModules || []
+        },
         mapPos: {
             x: typeof mapShip !== 'undefined' ? Math.round(mapShip.x) : 0,
             y: typeof mapShip !== 'undefined' ? Math.round(mapShip.y) : 0,
@@ -152,38 +157,26 @@ window.syncWorldWithPlayer = function(playerData) {
     if (!playerData || !playerData.worldData) return;
     
     const wd = playerData.worldData;
-
-    // 1. Копируем тип системы
     currentSystemType = wd.systemType || 'deep_space';
     
-    // 2. Копируем цвета (Theme)
     if (wd.theme) {
-        // Используем JSON.parse/stringify для глубокого копирования
         const syncedTheme = JSON.parse(JSON.stringify(wd.theme));
-        bgState.currentTheme = syncedTheme;
-        bgState.nextTheme = syncedTheme; // Приравниваем, чтобы не было перехода (lerp)
-        bgState.progress = 0;
+        // ИСПРАВЛЕНИЕ: Не меняем currentTheme сразу, чтобы сработал плавный переход (lerp) в конце варпа
+        bgState.nextTheme = syncedTheme; 
     }
 
-    // 3. Копируем станцию
     if (currentSystemType === 'station' && wd.station) {
         station.x = wd.station.x;
         station.y = wd.station.y;
         station.visible = true;
-        // Перегенерируем структуру станции локально (визуально будет похожа)
         if (typeof generateStation === 'function') generateStation();
     } else {
         station.visible = false;
     }
 
-    // 4. Устанавливаем SystemID равным UID того игрока (мы теперь в его системе)
     mpState.currentSystemId = playerData.uid;
     mpState.isHost = false;
-    
-    // Обновляем подписку, чтобы видеть его и других гостей
     subscribeToCurrentSystem();
-    
-    console.log(`JUMPED TO PLAYER SYSTEM: ${playerData.nickname} (ID: ${mpState.currentSystemId})`);
 };
 
 // Сброс системы на свою (при обычном варпе в никуда)
@@ -197,63 +190,101 @@ window.resetToMySystem = function() {
 };
 
 // Отрисовка других игроков (вызывается в main.js)
+/* multiplayer.js - Обновленная отрисовка для коопа */
+
+/* В multiplayer.js -> функция drawRemotePlayers */
 window.drawRemotePlayers = function(ctx, currentMode, viewOffset, tileSize) {
     if (!mpState.remotePlayers) return;
 
     Object.values(mpState.remotePlayers).forEach(p => {
-        // Рендер на КАРТЕ (STATE_MAP = 2)
-        if (currentMode === 2 && p.locationMode === 2) { 
+        // --- 1. КАРТА (Показываем друга ВСЕГДА, если мы на карте) ---
+        if (currentMode === 2 && p.mapPos) { 
             const rx = p.mapPos.x;
             const ry = p.mapPos.y;
-            
             ctx.save();
             ctx.translate(rx, ry);
             ctx.rotate(p.mapPos.angle);
-            
-            // Рисуем треугольник (корабль друга)
-            ctx.fillStyle = '#ff1744'; // Красный корабль
             ctx.shadowBlur = 10; ctx.shadowColor = '#ff1744';
+            ctx.fillStyle = '#ff1744'; 
             ctx.beginPath(); 
             ctx.moveTo(10, 0); ctx.lineTo(-8, 6); ctx.lineTo(-4, 0); ctx.lineTo(-8, -6); 
             ctx.fill();
-            ctx.shadowBlur = 0;
             ctx.restore();
-
-            // Никнейм
             ctx.fillStyle = '#ff1744';
-            ctx.font = "10px Orbitron";
-            ctx.textAlign = "center";
-            ctx.fillText(p.nickname, rx, ry - 15);
+            ctx.font = "10px Orbitron"; ctx.textAlign = "center";
+            ctx.fillText(p.nickname, rx, ry - 18);
         }
         
-        // Рендер на СТАНЦИИ / В АНГАРЕ (STATE_HANGAR = 3)
-        if (currentMode === 3 && p.locationMode === 3) {
-            // viewOffset уже применен к контексту в main.js перед вызовом этой функции
-            // поэтому рисуем просто по координатам мира
-            
+        // --- 2. АНГАР (Персонаж + МОНОЛИТНЫЙ КОРАБЛЬ) ---
+        // Показываем, если мы в ангаре, а друг в ангаре ИЛИ внутри корабля
+        if (currentMode === 3 && (p.locationMode === 3 || p.locationMode === 1)) {
             const rx = p.stationPos.x;
             const ry = p.stationPos.y;
             const scale = tileSize / 50;
+            
+            // РИСУЕМ КОРАБЛЬ ДРУГА (Твой скрипт из drawHangar)
+            if (p.shipStructure) {
+                ctx.save();
+                // 1. ПОЛ
+                ctx.fillStyle = '#455a64'; 
+                p.shipStructure.tiles.forEach(t => {
+                    ctx.fillRect(t.x * tileSize, t.y * tileSize, tileSize, tileSize);
+                });
 
-            // Простая отрисовка персонажа (красный силуэт)
+                // 2. ОБВОДКА (КРЫША / МОНОЛИТ)
+                ctx.strokeStyle = '#78909c'; ctx.lineWidth = 3; ctx.beginPath();
+                const friendHasFloor = (gx, gy) => p.shipStructure.tiles.some(t => t.x === gx && t.y === gy);
+                p.shipStructure.tiles.forEach(t => {
+                    const x = t.x * tileSize; const y = t.y * tileSize;
+                    if (!friendHasFloor(t.x, t.y - 1)) { ctx.moveTo(x, y); ctx.lineTo(x + tileSize, y); }
+                    if (!friendHasFloor(t.x, t.y + 1)) { ctx.moveTo(x, y + tileSize); ctx.lineTo(x + tileSize, y + tileSize); }
+                    if (!friendHasFloor(t.x - 1, t.y)) { ctx.moveTo(x, y); ctx.lineTo(x, y + tileSize); }
+                    if (!friendHasFloor(t.x + 1, t.y)) { ctx.moveTo(x + tileSize, y); ctx.lineTo(x + tileSize, y + tileSize); }
+                });
+                ctx.stroke();
+
+                // 3. ТОЛЬКО ВНЕШНИЕ МОДУЛИ (Двигатель и Шлюз)
+                p.shipStructure.modules.forEach(mod => {
+                    const mx = mod.x * tileSize; const my = mod.y * tileSize;
+                    const mw = mod.w * tileSize; const mh = mod.h * tileSize;
+                    
+                    if (mod.type === 'engine') {
+                        ctx.fillStyle = 'rgba(0, 229, 255, 0.8)'; ctx.shadowBlur = 15; ctx.shadowColor = '#00e5ff'; 
+                        ctx.fillRect(mx + 5, my + mh - tileSize + 5, mw - 10, tileSize - 10); ctx.shadowBlur = 0;
+                    }
+                    if (mod.type === 'airlock') {
+                        ctx.fillStyle = '#37474f'; ctx.fillRect(mx + 5, my + 5, mw - 10, mh - 10); 
+                        // Для чужого корабля рисуем просто индикатор
+                        ctx.fillStyle = '#d32f2f'; ctx.beginPath(); ctx.arc(mx + mw/2, my + mh/2, 4, 0, Math.PI*2); ctx.fill();
+                    }
+                });
+                ctx.restore();
+            }
+
+            // РИСУЕМ ПЕРСОНАЖА ПОВЕРХ
+            const bob = (p.isMoving) ? Math.sin(Date.now() * 0.01) * 2 * scale : 0;
             ctx.save();
             ctx.translate(rx, ry);
-            ctx.scale(p.stationPos.facing, 1);
-            
-            ctx.fillStyle = 'rgba(255, 23, 68, 0.8)'; // Полупрозрачный красный
-            
-            // Тело
-            ctx.fillRect(-6 * scale, -8 * scale, 12 * scale, 16 * scale);
-            // Голова
-            ctx.beginPath(); ctx.arc(0, -10 * scale, 5 * scale, 0, Math.PI*2); ctx.fill();
-            
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 15 * scale, 12 * scale, 6 * scale, 0, 0, Math.PI*2); ctx.fill();
+            ctx.scale(p.stationPos.facing || 1, 1);
+            ctx.translate(0, bob);
+            ctx.fillStyle = '#263238'; 
+            ctx.beginPath(); ctx.ellipse(-6 * scale, 12 * scale, 5 * scale, 4 * scale, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(6 * scale, 12 * scale, 5 * scale, 4 * scale, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#37474f'; ctx.fillRect(-9 * scale, -8 * scale, 18 * scale, 20 * scale);
+            ctx.fillStyle = '#ff1744'; ctx.fillRect(-7 * scale, -6 * scale, 14 * scale, 10 * scale);
+            ctx.fillStyle = '#eceff1'; ctx.beginPath(); ctx.arc(0, -12 * scale, 11 * scale, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#4fc3f7'; ctx.beginPath(); 
+            if (ctx.roundRect) ctx.roundRect(-8 * scale, -16 * scale, 18 * scale, 10 * scale, 4 * scale); 
+            else ctx.rect(-8 * scale, -16 * scale, 18 * scale, 10 * scale);
+            ctx.fill();
             ctx.restore();
 
-            // Никнейм над головой
-            ctx.fillStyle = '#ff1744';
-            ctx.font = "bold 10px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(p.nickname, rx, ry - 25 * scale);
+            ctx.fillStyle = '#fff'; ctx.font = "bold 12px Roboto"; ctx.textAlign = "center";
+            ctx.shadowBlur = 4; ctx.shadowColor = "#000";
+            ctx.fillText(p.nickname, rx, ry - 30 * scale);
+            ctx.shadowBlur = 0;
         }
     });
 };

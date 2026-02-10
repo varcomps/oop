@@ -6,14 +6,12 @@ let isRightMouseDown = false;
 function initGame() {
     resize();
     updateCurrencyUI();
-    initShip();
+    // УДАЛЕНО: initShip(); // Теперь вызывается только внутри loadGameData
     initSpace();
     if (window.initSpectrum) initSpectrum(); 
     if (window.renderStorageGrid) window.renderStorageGrid();
     
-    // --- ЗАПУСК МУЛЬТИПЛЕЕРА ---
     if (window.initMultiplayer) initMultiplayer();
-    // ----------------------------
     
     const hud = document.getElementById('hud-top-left');
     if(hud) hud.style.display = 'none';
@@ -134,11 +132,33 @@ function performStateSwitch() {
     }
 }
 
+/* В main.js - Обновление функции isWalkable */
+
 function isWalkable(px, py) {
-    const gx = Math.floor(px / TILE_SIZE); const gy = Math.floor(py / TILE_SIZE);
+    const gx = Math.floor(px / TILE_SIZE); 
+    const gy = Math.floor(py / TILE_SIZE);
     const mod = installedModules.find(m => gx >= m.x && gx < m.x + m.w && gy >= m.y && gy < m.y + m.h);
+    
     if (mod && mod.type === 'airlock') return false; 
     
+    if (typeof mpState !== 'undefined' && mpState.remotePlayers) {
+        for (let uid in mpState.remotePlayers) {
+            const p = mpState.remotePlayers[uid];
+            if (currentState === STATE_HANGAR) {
+                // --- ПРОВЕРКА: Хитбокс только если игрок пристыкован (режим 1 или 3) ---
+                if (p.locationMode === 1 || p.locationMode === 3) {
+                    // 1. Коллизия с корпусом чужого корабля
+                    if (p.shipStructure && p.shipStructure.tiles) {
+                        if (p.shipStructure.tiles.some(t => t.x === gx && t.y === gy)) return false;
+                    }
+                    // 2. Коллизия с самим персонажем друга
+                    const distToPlayer = Math.hypot(px - p.stationPos.x, py - p.stationPos.y);
+                    if (distToPlayer < TILE_SIZE * 0.4) return false;
+                }
+            }
+        }
+    }
+    // ... остальная часть функции без изменений
     if (currentState === STATE_HANGAR) {
         const stMod = stationModules.find(m => gx >= m.x && gx < m.x + m.w && gy >= m.y && gy < m.y + m.h);
         if (stMod) return false;

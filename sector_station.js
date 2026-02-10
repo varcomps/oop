@@ -89,6 +89,8 @@ function isShipInDockingZone() {
     return Math.hypot(mapShip.x - station.x, mapShip.y - station.y) < station.dockingRadius;
 }
 
+/* sector_station.js - Обновленная логика стыковки */
+
 function handleDockingInteraction() {
     if (currentState !== STATE_MAP || currentSystemType !== 'station') return;
     
@@ -97,28 +99,64 @@ function handleDockingInteraction() {
         if (typeof uiHint !== 'undefined') uiHint.innerHTML = "UNDOCKED";
     } 
     else if (isShipInDockingZone()) { 
+        // --- ПРОВЕРКА СВОБОДНЫХ АНГАРОВ ---
+        const availableHangars = window.hangarSpots.filter(h => {
+            // Проверяем, нет ли чужого корабля в границах этого ангара
+            const isOccupied = Object.values(mpState.remotePlayers).some(p => {
+                // Если игрок на карте — его корабля в ангаре нет
+                if (p.locationMode === 2) return false; 
+                if (!p.shipStructure || !p.shipStructure.tiles) return false;
+                // Проверяем, пересекается ли хоть одна плитка чужого корабля с этим ангаром
+                return p.shipStructure.tiles.some(t => 
+                    t.x >= h.x && t.x < h.x + h.w && 
+                    t.y >= h.y && t.y < h.y + h.h
+                );
+            });
+            return !isOccupied;
+        });
+
+        // Если все ангары заняты — просто выходим (без уведомлений)
+        if (availableHangars.length === 0) return;
+
+        // Выбираем первый свободный
+        const targetHangar = availableHangars[0];
         isDocked = true; 
         mapShip.vx = 0; mapShip.vy = 0; 
         
-        if (window.hangarSpots && window.hangarSpots.length > 0) {
-            const randomHangar = window.hangarSpots[Math.floor(Math.random() * window.hangarSpots.length)];
-            const targetX = (randomHangar.x + randomHangar.w / 2) * TILE_SIZE;
-            const targetY = (randomHangar.y + randomHangar.h / 2) * TILE_SIZE;
-            const diffGridX = Math.round((targetX - player.x) / TILE_SIZE);
-            const diffGridY = Math.round((targetY - player.y) / TILE_SIZE);
+        // --- ЛОГИКА ТОЧНОГО ЦЕНТРИРОВАНИЯ КОРАБЛЯ ---
+        if (window.shipTiles && window.shipTiles.length > 0) {
+            // 1. Находим границы (AABB) текущего корабля
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            shipTiles.forEach(t => {
+                if (t.x < minX) minX = t.x; if (t.x > maxX) maxX = t.x;
+                if (t.y < minY) minY = t.y; if (t.y > maxY) maxY = t.y;
+            });
 
-            player.x += diffGridX * TILE_SIZE;
-            player.y += diffGridY * TILE_SIZE;
+            const shipW = maxX - minX + 1;
+            const shipH = maxY - minY + 1;
 
-            if (typeof shipTiles !== 'undefined') {
-                shipTiles.forEach(t => { t.x += diffGridX; t.y += diffGridY; });
-            }
+            // 2. Вычисляем центр корабля и центр ангара (в сетке)
+            const shipGridCX = minX + shipW / 2;
+            const shipGridCY = minY + shipH / 2;
+            const hangarGridCX = targetHangar.x + targetHangar.w / 2;
+            const hangarGridCY = targetHangar.y + targetHangar.h / 2;
+
+            // 3. Смещение для всех элементов
+            const diffGridX = Math.round(hangarGridCX - shipGridCX);
+            const diffGridY = Math.round(hangarGridCY - shipGridCY);
+
+            // Перемещаем плитки и модули
+            shipTiles.forEach(t => { t.x += diffGridX; t.y += diffGridY; });
             if (typeof installedModules !== 'undefined') {
                 installedModules.forEach(m => { m.x += diffGridX; m.y += diffGridY; });
             }
+            
+            // Перемещаем игрока на ту же дистанцию
+            player.x += diffGridX * TILE_SIZE;
+            player.y += diffGridY * TILE_SIZE;
 
             if (typeof uiHint !== 'undefined') {
-                uiHint.innerHTML = `DOCKED AT: <span style="color:#00e5ff">${randomHangar.name}</span>`;
+                uiHint.innerHTML = `DOCKED AT: <span style="color:#00e5ff">${targetHangar.name}</span>`;
             }
         } 
         startTransition(STATE_SHIP); 

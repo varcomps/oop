@@ -42,18 +42,22 @@ function initShip() {
     window.installedModules.push({ type: 'bridge', x: startGX + 1, y: startGY + 1, w: 2, h: 2 });
     window.installedModules.push({ type: 'airlock', x: airlockFloorX, y: airlockFloorY, w: 1, h: 2 });
 
-    // ПОИСК СВОБОДНОЙ КЛЕТКИ ВОКРУГ МОСТИКА
+    // Вызываем размещение игрока
+    window.placePlayerInShip();
+}
+
+// НОВАЯ ФУНКЦИЯ: Размещение игрока у мостика
+window.placePlayerInShip = function() {
     const bridge = window.installedModules.find(m => m.type === 'bridge');
     if (bridge) {
         const checkTiles = [
-            { gx: bridge.x + bridge.w, gy: bridge.y },     // Справа
-            { gx: bridge.x - 1, gy: bridge.y },            // Слева
-            { gx: bridge.x, gy: bridge.y - 1 },            // Сверху
-            { gx: bridge.x, gy: bridge.y + bridge.h }      // Снизу
+            { gx: bridge.x + bridge.w, gy: bridge.y },     
+            { gx: bridge.x - 1, gy: bridge.y },            
+            { gx: bridge.x, gy: bridge.y - 1 },            
+            { gx: bridge.x, gy: bridge.y + bridge.h }      
         ];
 
         for (let pos of checkTiles) {
-            // Если клетка — это пол и она не занята модулем
             if (getFloor(pos.gx, pos.gy) && !isTileOccupiedByModule(pos.gx, pos.gy)) {
                 player.x = (pos.gx + 0.5) * TILE_SIZE;
                 player.y = (pos.gy + 0.5) * TILE_SIZE;
@@ -61,7 +65,7 @@ function initShip() {
             }
         }
     }
-}
+};
 
 function updateBuildUI() {
     if (hullCountDisplay) hullCountDisplay.innerText = `x${player.hullParts}`;
