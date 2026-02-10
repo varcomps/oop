@@ -396,20 +396,22 @@ function countPlayerCargo(id) {
     return window.placedStorageItems.filter(i => i.type === 'cargo' && i.commodityId === id).length;
 }
 
+/* market.js — обновленная функция tradeTransaction */
 function tradeTransaction(id, action) {
     const item = marketState.items.find(i => i.id === id);
     if (!item) return;
 
     if (action === 'buy') {
         const stock = marketState.stationStock.sell[id] || 0;
-        if (stock <= 0) {
-            setTradeStatus("STATION OUT OF STOCK", "#ff1744");
-            return;
-        }
+        if (stock <= 0) { setTradeStatus("STATION OUT OF STOCK", "#ff1744"); return; }
 
         if (player.credits >= item.price) {
             if (tryAutoBuyCargo(id, item.name, item.price, item.w, item.h)) {
                 marketState.stationStock.sell[id]--; 
+                
+                // === СИНХРОНИЗАЦИЯ: Отправляем обновленный сток в сеть ===
+                if (window.broadcastMarketUpdate) window.broadcastMarketUpdate();
+
                 setTradeStatus(`BOUGHT ${item.name}`, "#00e676");
                 updateTradePanel(item);
                 renderMarketList();
@@ -417,31 +419,27 @@ function tradeTransaction(id, action) {
             } else {
                 setTradeStatus(`NOT ENOUGH SPACE (${item.w}x${item.h})`, "#ff1744");
             }
-        } else {
-            setTradeStatus("INSUFFICIENT FUNDS", "#ff1744");
         }
     } 
     else if (action === 'sell') {
         const demand = marketState.stationStock.buy[id] || 0;
-        if (demand <= 0) {
-            setTradeStatus("STATION NO LONGER BUYING", "#ff1744");
-            return;
-        }
+        if (demand <= 0) { setTradeStatus("STATION NO LONGER BUYING", "#ff1744"); return; }
 
         const idx = window.placedStorageItems.findIndex(i => i.type === 'cargo' && i.commodityId === id);
         if (idx !== -1) {
             window.placedStorageItems.splice(idx, 1);
             player.credits += item.price;
             marketState.stationStock.buy[id]--; 
+
+            // === СИНХРОНИЗАЦИЯ: Отправляем обновленный сток в сеть ===
+            if (window.broadcastMarketUpdate) window.broadcastMarketUpdate();
+
             updateCurrencyUI();
-            
             if(window.renderStorageGrid) window.renderStorageGrid(); 
             window.renderMarketGrid(); 
             updateTradePanel(item);
             renderMarketList();
             setTradeStatus(`SOLD ${item.name}`, "#d500f9");
-        } else {
-            setTradeStatus("YOU DON'T HAVE THIS", "#ff1744");
         }
     }
 }
@@ -475,7 +473,33 @@ window.getMarketSaveData = function() {
         stock: marketState.stationStock
     };
 };
+/* В market.js -> Добавьте функцию синхронизации */
+window.syncMarketWithHost = function(data) {
+    if (!data || !data.items || !data.stock) return;
 
+    // 1. Обновляем состояние цен и истории
+    marketState.items = data.items;
+    
+    // 2. Обновляем запасы станции
+    marketState.stationStock = data.stock;
+
+    // 3. Если у игрока открыто окно рынка, перерисовываем его
+    if (isMarketOpen) {
+        renderMarketList();
+        
+        // Обновляем детали выбранного товара (цену и кнопки Buy/Sell)
+        if (marketState.selectedId) {
+            const item = marketState.items.find(i => i.id === marketState.selectedId);
+            if (item) {
+                updateTradePanel(item);
+                // Перерисовываем график, если функция доступна
+                if (typeof drawGraph === 'function') {
+                    drawGraph(item, -1);
+                }
+            }
+        }
+    }
+};
 window.restoreMarketSaveData = function(data) {
     if (!data) return;
     if (data.items) marketState.items = data.items;

@@ -22,7 +22,6 @@ function initMultiplayer() {
     subscribeToCurrentSystem();
 }
 
-/* В multiplayer.js -> функция sendMyStatus */
 function sendMyStatus() {
     const user = firebase.auth().currentUser;
     if (!user) return;
@@ -38,7 +37,6 @@ function sendMyStatus() {
         currentSystemId: mpState.currentSystemId,
         locationMode: currentState,
         isMoving: !!(inputs.up || inputs.down || inputs.left || inputs.right),
-        // ПЕРЕДАЕМ РЕАЛЬНУЮ СТРУКТУРУ КОРАБЛЯ
         shipStructure: {
             tiles: window.shipTiles || [],
             modules: window.installedModules || []
@@ -60,9 +58,22 @@ function sendMyStatus() {
         }
     };
 
+    // --- НОВОЕ: Если я ХОСТ, я отправляю данные своего рынка всем гостям ---
+    if (mpState.isHost && window.getMarketSaveData) {
+        data.marketData = window.getMarketSaveData();
+    }
+
     firebase.database().ref('online_players/' + user.uid).set(data);
 }
+window.broadcastMarketUpdate = function() {
+    const user = firebase.auth().currentUser;
+    if (!user || !mpState.currentSystemId) return;
 
+    // Используем update, чтобы менять только количество, не трогая цены
+    firebase.database().ref('online_players/' + mpState.currentSystemId + '/marketData').update({
+        stock: marketState.stationStock
+    });
+};
 // Подписка на игроков в той же "комнате" (SystemId)
 let playersRef = null;
 function subscribeToCurrentSystem() {
@@ -75,16 +86,48 @@ function subscribeToCurrentSystem() {
 
         if (!all) return;
         const myUid = firebase.auth().currentUser.uid;
+        const now = Date.now();
 
+        // --- 1. СИНХРОНИЗАЦИЯ РЫНКА С ХОСТОМ ---
+        const hostData = all[mpState.currentSystemId];
+        
+        if (hostData && hostData.marketData) {
+            // Синхронизация количества (сток) — обновляется для всех (и хоста, и гостей), 
+            // чтобы покупки любого игрока сразу отображались у остальных.
+            if (hostData.marketData.stock) {
+                marketState.stationStock = hostData.marketData.stock;
+            }
+
+            // Синхронизация цен и истории графиков — только для гостей. 
+            // Хост является источником цен, гость их просто принимает.
+            if (!mpState.isHost && hostData.marketData.items) {
+                marketState.items = hostData.marketData.items;
+            }
+
+            // Мгновенное обновление интерфейса рынка, если он открыт
+            if (typeof isMarketOpen !== 'undefined' && isMarketOpen) {
+                if (typeof renderMarketList === 'function') renderMarketList();
+                
+                if (marketState.selectedId) {
+                    const item = marketState.items.find(i => i.id === marketState.selectedId);
+                    if (item) {
+                        if (typeof updateTradePanel === 'function') updateTradePanel(item);
+                        if (typeof drawGraph === 'function') drawGraph(item, -1);
+                    }
+                }
+            }
+        }
+
+        // --- 2. ОБРАБОТКА ДАННЫХ ДРУГИХ ИГРОКОВ ---
         Object.keys(all).forEach(uid => {
             if (uid === myUid) return; // Себя не рендерим
             
             const p = all[uid];
-            // Проверка на "онлайн" (если данные старше 15 секунд - игрок вышел)
-            const now = Date.now();
+            
+            // Проверка на "онлайн" (тайм-аут 15 секунд)
             if (now - p.timestamp > 15000) return;
 
-            // Самое главное: Игрок должен быть в ТОМ ЖЕ SystemId, что и мы
+            // Добавляем игрока в список отрисовки, только если он в той же системе
             if (p.currentSystemId === mpState.currentSystemId) {
                 mpState.remotePlayers[uid] = p;
             }
@@ -139,54 +182,58 @@ window.handleWarpLeave = function() {
     const user = firebase.auth().currentUser;
     if (!user) return;
 
-    console.log(">>> [MP] МГНОВЕННОЕ УДАЛЕНИЕ: Игрок уходит в гиперпрыжок.");
-    
-    // 1. Физически удаляем запись из таблицы онлайн-игроков
+    // 1. Удаляем старую запись из таблицы игроков
     firebase.database().ref('online_players/' + user.uid).remove();
     
-    // 2. Сбрасываем локальное состояние
-    mpState.currentSystemId = user.uid;
+    // 2. Генерируем НОВЫЙ ID системы (UID + время)
+    // Это гарантирует, что старые гости мгновенно потеряют связь при твоем прыжке
+    mpState.currentSystemId = user.uid + "_" + Date.now(); 
     mpState.isHost = true;
-    mpState.remotePlayers = {};
+    mpState.remotePlayers = {}; 
     
-    // 3. Переподписываемся на пустую систему
+    // 3. Переподписываемся на новую "чистую" комнату
+    if (playersRef) {
+        playersRef.off();
+        playersRef = null;
+    }
     subscribeToCurrentSystem();
+    
+    if (window.initMarket) {
+        window.initMarket();
+    }
+    console.log(">>> [MP] Прыжок совершен. ID системы обновлен.");
 };
 // Функция синхронизации мира при прыжке к игроку
 window.syncWorldWithPlayer = function(playerData) {
-    if (!playerData || !playerData.worldData) return;
-    
-    const wd = playerData.worldData;
-    currentSystemType = wd.systemType || 'deep_space';
-    
-    if (wd.theme) {
-        const syncedTheme = JSON.parse(JSON.stringify(wd.theme));
-        // ИСПРАВЛЕНИЕ: Не меняем currentTheme сразу, чтобы сработал плавный переход (lerp) в конце варпа
-        bgState.nextTheme = syncedTheme; 
-    }
+    if (!playerData || !playerData.uid) return;
 
-    if (currentSystemType === 'station' && wd.station) {
-        station.x = wd.station.x;
-        station.y = wd.station.y;
-        station.visible = true;
-        if (typeof generateStation === 'function') generateStation();
-    } else {
-        station.visible = false;
-    }
+    // ПЕРЕД ПОДКЛЮЧЕНИЕМ: Запрашиваем текущий ID инстанса, в котором сидит друг
+    // Это решает проблему undefined, так как мы берем актуальные данные из БД
+    firebase.database().ref('online_players/' + playerData.uid + '/currentSystemId').once('value').then(snap => {
+        const targetId = snap.val() || playerData.uid; // Фоллбек на UID, если ID не найден
 
-    mpState.currentSystemId = playerData.uid;
-    mpState.isHost = false;
-    subscribeToCurrentSystem();
-};
+        const wd = playerData.worldData;
+        currentSystemType = wd.systemType || 'deep_space';
+        
+        if (wd && wd.theme) {
+            bgState.nextTheme = JSON.parse(JSON.stringify(wd.theme)); 
+        }
 
-// Сброс системы на свою (при обычном варпе в никуда)
-window.resetToMySystem = function() {
-    const user = firebase.auth().currentUser;
-    if (user) {
-        mpState.currentSystemId = user.uid;
-        mpState.isHost = true;
+        if (currentSystemType === 'station' && wd.station) {
+            station.x = wd.station.x;
+            station.y = wd.station.y;
+            station.visible = true;
+            if (typeof generateStation === 'function') generateStation();
+        } else {
+            station.visible = false;
+        }
+
+        // Устанавливаем полученный ID (теперь это точно строка, а не undefined)
+        mpState.currentSystemId = targetId;
+        mpState.isHost = false;
+        
         subscribeToCurrentSystem();
-    }
+    });
 };
 
 // Отрисовка других игроков (вызывается в main.js)

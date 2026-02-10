@@ -158,6 +158,8 @@ auth.onAuthStateChanged((user) => {
 
     } else {
         // --- ПОЛЬЗОВАТЕЛЬ ВЫШЕЛ ---
+        // --- ПОЛЬЗОВАТЕЛЬ ВЫШЕЛ ---
+        if (window.forceFullCoopCleanup) window.forceFullCoopCleanup();
         currentUser = null;
         authModal.style.display = 'flex'; 
         isGameLoaded = false;
