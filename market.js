@@ -1,4 +1,5 @@
-/* market.js - Обновленная версия: независимые шансы на покупку и продажу */
+
+/* market.js - Обновленная версия: Выделение товаров в наличии + цифра количества */
 
 const marketUI = document.getElementById('marketUI');
 const marketListContainer = document.getElementById('marketList');
@@ -198,6 +199,19 @@ function renderMarketList() {
         div.className = 'market-item-row';
         if (item.id === marketState.selectedId) div.classList.add('selected');
         
+        // --- ИЗМЕНЕНИЕ: Подсчет и подсветка ---
+        const owned = countPlayerCargo(item.id);
+        let displayName = item.name;
+
+        if (owned > 0) {
+            // Выделяем цветом фона (чуть светлее) и зеленой полоской
+            div.style.background = '#1b262c';
+            div.style.color = '#e0f2f1';
+            // Добавляем цифру перед названием
+            displayName = `${owned} ${item.name}`;
+        }
+        // -------------------------------------
+
         let status = '';
         if (marketState.stationStock.sell[item.id] > 0) status += '<span class="status-sell" style="margin-right:2px">SELL</span>';
         if (marketState.stationStock.buy[item.id] > 0) status += '<span class="status-buy">BUY</span>';
@@ -207,7 +221,7 @@ function renderMarketList() {
         const trend = diff >= 0 ? '<span class="trend-up">▲</span>' : '<span class="trend-down">▼</span>';
 
         div.innerHTML = `
-            <div class="mi-name">${item.name}</div>
+            <div class="mi-name">${displayName}</div>
             <div class="mi-price">${item.price.toFixed(5)}</div>
             <div class="mi-trend">${trend}</div>
             <div class="mi-status">${status}</div>
@@ -228,12 +242,27 @@ window.renderMarketGrid = function() {
             div.className = 'grid-item-visual';
             div.style.boxSizing = 'border-box';
 
+            // ИСПРАВЛЕНИЕ: Унификация с storage.js
             if (item.type === 'fuel') {
                 div.classList.add('fuel-style');
                 div.innerHTML = '<div class="fuel-charge"></div><span class="fuel-label">F-CELL</span>';
-            } else if (item.type === 'cargo') {
+            }
+            else if (item.type === 'fuel_premium') {
+                div.classList.add('fuel-style');
+                div.style.borderColor = '#ffd700'; 
+                div.style.boxShadow = 'inset 0 0 10px rgba(255, 215, 0, 0.3)';
+                div.innerHTML = '<div class="fuel-charge" style="background:#ffd700; box-shadow:0 0 10px #ffd700;"></div><span class="fuel-label" style="color:#ffd700;">SUPER</span>';
+            }
+            else if (item.type === 'fuel_shift') {
+                div.classList.add('fuel-style');
+                div.style.borderColor = '#d50000'; 
+                div.style.boxShadow = 'inset 0 0 10px rgba(255, 23, 68, 0.3)';
+                div.innerHTML = '<div class="fuel-charge" style="background:#ff1744; box-shadow:0 0 10px #ff1744;"></div><span class="fuel-label" style="color:#ff1744;">SHIFT</span>';
+            }
+            else if (item.type === 'cargo') {
                 div.classList.add('cargo-style');
-                div.innerHTML = `<span class="cargo-text">${item.name ? item.name.substring(0,3).toUpperCase() : 'BOX'}</span>`;
+                // Унифицировано с storage.js: substring(0,8) и 'CRATE'
+                div.innerHTML = `<span class="cargo-text">${item.name ? item.name.substring(0,8) : 'CRATE'}</span>`;
             }
 
             const step = 47; 
@@ -506,3 +535,7 @@ window.restoreMarketSaveData = function(data) {
     if (data.stock) marketState.stationStock = data.stock;
     console.log("Market data restored.");
 };
+
+// === ИСПРАВЛЕНИЕ: Экспорт функции в глобальную область видимости ===
+// Это необходимо, так как HTML onclick="tradeTransaction(...)" ищет функцию в window
+window.tradeTransaction = tradeTransaction;

@@ -1,3 +1,5 @@
+/* ship.js - FIXED: Sync Camera, Mouse & Grid */
+
 const buildMenu = document.getElementById('buildMenu');
 const hullCountDisplay = document.getElementById('hullCountDisplay');
 
@@ -13,6 +15,21 @@ let isBuildMenuOpen = false;
 let selectedBuildItem = null;
 let movingOriginalState = null;
 let buildRotation = 0;
+
+// ПЕРЕМЕННЫЕ ДЛЯ КАМЕРЫ И СЕТКИ
+let isPanning = false;
+let panStartX = 0;
+let panStartY = 0;
+let buildZoom = 1.0;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3.0;
+
+// Размеры допустимой зоны строительства (Ангар 20x40 минус по 1 клетке с краев)
+const BUILD_AREA_W = 18; 
+const BUILD_AREA_H = 38;
+
+// Границы текущей зоны строительства (вычисляются при открытии)
+let buildBounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
 // Направление взгляда (-1 влево, 1 вправо)
 player.facing = 1;
@@ -46,7 +63,7 @@ function initShip() {
     window.placePlayerInShip();
 }
 
-// НОВАЯ ФУНКЦИЯ: Размещение игрока у мостика
+// Размещение игрока у мостика
 window.placePlayerInShip = function() {
     const bridge = window.installedModules.find(m => m.type === 'bridge');
     if (bridge) {
@@ -116,7 +133,6 @@ function getShipClusters() {
 function tryToggleBuildMenu() {
     if (transition.active) return false;
 
-    // Элементы UI для переключения
     const hud = document.getElementById('hud-top-left');
     const handle = document.querySelector('.build-handle-strip');
 
@@ -128,8 +144,7 @@ function tryToggleBuildMenu() {
             for (let i = 1; i < clusters.length; i++) {
                 detachedTiles.push(...clusters[i]);
             }
-            // ЗАПУСКАЕМ ТАЙМЕР ОШИБКИ
-            detachAnimTimer = 100; // ~1.5 секунды анимации
+            detachAnimTimer = 100;
             uiHint.innerHTML = "<span style='color:red'>ОШИБКА: РАЗРЫВ КОРПУСА!</span>";
             return false;
         } else {
@@ -142,14 +157,44 @@ function tryToggleBuildMenu() {
     if (isBuildMenuOpen) { 
         buildMenu.classList.remove('slide-in');
         
-        // Входим в режим строительства: СКРЫВАЕМ HUD, ПОКАЗЫВАЕМ РУЧКУ
         if(hud) hud.style.display = 'none';
         if(handle) handle.style.display = 'flex';
 
-        const shipCenterX = (startGX + 2) * TILE_SIZE;
-        const shipCenterY = (startGY + 4) * TILE_SIZE;
-        viewOffset.x = canvas.width / 2 - shipCenterX; 
-        viewOffset.y = canvas.height / 2 - shipCenterY;
+        // --- ЛОГИКА ЦЕНТРИРОВАНИЯ И ГРАНИЦ ---
+        buildZoom = 1.0; 
+
+        let centerX = 0, centerY = 0;
+
+        if (shipTiles.length > 0) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            shipTiles.forEach(t => {
+                if (t.x < minX) minX = t.x;
+                if (t.x > maxX) maxX = t.x;
+                if (t.y < minY) minY = t.y;
+                if (t.y > maxY) maxY = t.y;
+            });
+            centerX = minX + (maxX - minX + 1) / 2;
+            centerY = minY + (maxY - minY + 1) / 2;
+        } else {
+            centerX = startGX + 2;
+            centerY = startGY + 4;
+        }
+
+        // Вычисляем границы "Виртуального Ангара"
+        const originX = Math.floor(centerX - BUILD_AREA_W / 2);
+        const originY = Math.floor(centerY - BUILD_AREA_H / 2);
+
+        buildBounds.minX = originX;
+        buildBounds.maxX = originX + BUILD_AREA_W;
+        buildBounds.minY = originY;
+        buildBounds.maxY = originY + BUILD_AREA_H;
+
+        // Центрируем камеру
+        const gridCenterPixelX = (originX + BUILD_AREA_W / 2) * TILE_SIZE;
+        const gridCenterPixelY = (originY + BUILD_AREA_H / 2) * TILE_SIZE;
+
+        viewOffset.x = (canvas.width / 2) - gridCenterPixelX;
+        viewOffset.y = (canvas.height / 2) - gridCenterPixelY;
         
         updateBuildUI();
         detachedTiles = []; 
@@ -157,7 +202,6 @@ function tryToggleBuildMenu() {
         
         clearCursor(); 
     } else {
-        // Выходим из режима строительства: ПОКАЗЫВАЕМ HUD, СКРЫВАЕМ РУЧКУ
         if(hud) hud.style.display = 'flex';
         if(handle) handle.style.display = 'none';
 
@@ -169,11 +213,8 @@ function tryToggleBuildMenu() {
     return true;
 }
 
-// ЛОГИКА АВТОСКРЫТИЯ МЕНЮ
 window.addEventListener('mousemove', (e) => {
     if (!isBuildMenuOpen) return;
-
-    // Увеличили зону, чтобы ловить ручку
     if (e.clientX < 45 || (e.clientX < 200 && buildMenu.classList.contains('slide-in'))) {
         buildMenu.classList.add('slide-in');
     } else {
@@ -197,7 +238,18 @@ function selectModule(type) {
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
 }
 
-function getGridFromMouse() { return { gx: Math.floor((mouseX - viewOffset.x) / TILE_SIZE), gy: Math.floor((mouseY - viewOffset.y) / TILE_SIZE) }; }
+// --- УЧЕТ ЗУМА ПРИ ПОЛУЧЕНИИ КООРДИНАТ МЫШИ ---
+function getGridFromMouse() { 
+    // Формула: (Screen - Offset) / Zoom = World
+    const worldX = (mouseX - viewOffset.x) / buildZoom;
+    const worldY = (mouseY - viewOffset.y) / buildZoom;
+    
+    return { 
+        gx: Math.floor(worldX / TILE_SIZE), 
+        gy: Math.floor(worldY / TILE_SIZE) 
+    }; 
+}
+
 function getFloor(gx, gy) { return shipTiles.find(t => t.x === gx && t.y === gy); }
 function isTileOccupiedByModule(gx, gy) { return installedModules.some(m => gx >= m.x && gx < m.x + m.w && gy >= m.y && gy < m.y + m.h); }
 
@@ -220,11 +272,8 @@ function canBuildFloor(gx, gy) {
 
 function canBuildModule(gx, gy, type) {
     const w = getModuleWidth(type); const h = getModuleHeight(type);
-    
-    // Проверка на пересечение с другими модулями
     for (let i=0; i<w; i++) for (let j=0; j<h; j++) if (isTileOccupiedByModule(gx+i, gy+j)) return false;
     
-    // Двигатель (сзади)
     if (type === 'engine') {
         if (buildRotation !== 0) return false;
         if (!getFloor(gx, gy) || !getFloor(gx+1, gy)) return false;
@@ -232,46 +281,39 @@ function canBuildModule(gx, gy, type) {
         return true;
     }
 
-    // Шлюз (Airlock) - ЖЕСТКАЯ ПРОВЕРКА СТЕН
     if (type === 'airlock') {
-        // 1. Сам шлюз должен стоять ПОЛНОСТЬЮ НА ПОЛУ
         for (let i=0; i<w; i++) for (let j=0; j<h; j++) if (!getFloor(gx+i, gy+j)) return false;
-
-        let leftSideVoid = true; 
-        let rightSideVoid = true;
-        let topSideVoid = true;
-        let bottomSideVoid = true;
-
-        if (buildRotation === 0) { // Вертикальный (1x2)
-            // Проверяем Левую сторону (должны быть ОБЕ клетки пустые)
+        let leftSideVoid = true, rightSideVoid = true, topSideVoid = true, bottomSideVoid = true;
+        if (buildRotation === 0) { 
             if (getFloor(gx-1, gy) || getFloor(gx-1, gy+1)) leftSideVoid = false;
-            // Проверяем Правую сторону
             if (getFloor(gx+1, gy) || getFloor(gx+1, gy+1)) rightSideVoid = false;
-            
-            // Валидно, если ХОТЯ БЫ ОДНА длинная сторона ПОЛНОСТЬЮ выходит в космос
             return leftSideVoid || rightSideVoid;
-        } 
-        else { // Горизонтальный (2x1)
-            // Проверяем Верхнюю сторону
+        } else { 
             if (getFloor(gx, gy-1) || getFloor(gx+1, gy-1)) topSideVoid = false;
-            // Проверяем Нижнюю сторону
             if (getFloor(gx, gy+1) || getFloor(gx+1, gy+1)) bottomSideVoid = false;
-            
             return topSideVoid || bottomSideVoid;
         }
     }
 
-    // Остальные модули - просто на полу
     for (let i=0; i<w; i++) for (let j=0; j<h; j++) if (!getFloor(gx+i, gy+j)) return false;
     return true;
+}
+
+function isInBuildBounds(gx, gy, w = 1, h = 1) {
+    return (gx >= buildBounds.minX && (gx + w) <= buildBounds.maxX &&
+            gy >= buildBounds.minY && (gy + h) <= buildBounds.maxY);
 }
 
 function attemptBuild() {
     if (currentState !== STATE_SHIP || !isBuildMenuOpen || transition.active) return;
     const { gx, gy } = getGridFromMouse();
-    if (gx < 0 || gx >= TARGET_COLS || gy < 0 || gy >= TARGET_ROWS) return;
 
     if (selectedBuildItem) {
+        const w = (selectedBuildItem === 'basic') ? 1 : getModuleWidth(selectedBuildItem);
+        const h = (selectedBuildItem === 'basic') ? 1 : getModuleHeight(selectedBuildItem);
+        
+        if (!isInBuildBounds(gx, gy, w, h)) return;
+
         if (selectedBuildItem === 'basic') { 
             if (canBuildFloor(gx, gy)) {
                 if (player.hullParts > 0) {
@@ -284,7 +326,7 @@ function attemptBuild() {
         } 
         else {
             if (canBuildModule(gx, gy, selectedBuildItem)) {
-                installedModules.push({ type: selectedBuildItem, x: gx, y: gy, w: getModuleWidth(selectedBuildItem), h: getModuleHeight(selectedBuildItem) });
+                installedModules.push({ type: selectedBuildItem, x: gx, y: gy, w: w, h: h });
                 movingOriginalState = null; clearCursor();
             }
         }
@@ -295,6 +337,8 @@ function attemptDelete() {
     if (currentState !== STATE_SHIP || !isBuildMenuOpen || transition.active) return;
     const { gx, gy } = getGridFromMouse();
     
+    if (!isInBuildBounds(gx, gy)) return;
+
     if (selectedBuildItem === 'basic' || selectedBuildItem === null) {
         const floor = getFloor(gx, gy);
         if (floor && !isTileOccupiedByModule(gx, gy)) {
@@ -327,7 +371,6 @@ function drawDiagonalStripes(x, y, alpha) {
     ctx.restore();
 }
 
-// НОВАЯ ФУНКЦИЯ ДЛЯ ТЕЛЕПОРТАЦИИ К ШЛЮЗУ ИЗ АНГАРА
 function teleportPlayerToInterior() {
     const airlock = installedModules.find(m => m.type === 'airlock');
     if (!airlock) return;
@@ -337,32 +380,42 @@ function teleportPlayerToInterior() {
     let targetX = airlock.x;
     let targetY = airlock.y;
 
-    // Определяем, с какой стороны пол (внутри корабля), а с какой - космос
-    // Вертикальный шлюз (1x2)
     if (w === 1 && h === 2) {
         if (getFloor(airlock.x - 1, airlock.y)) {
-            targetX = airlock.x - 1; // Пол слева
+            targetX = airlock.x - 1; 
         } else {
-            targetX = airlock.x + 1; // Пол справа
+            targetX = airlock.x + 1; 
         }
     } 
-    // Горизонтальный шлюз (2x1)
     else {
         if (getFloor(airlock.x, airlock.y - 1)) {
-            targetY = airlock.y - 1; // Пол сверху
+            targetY = airlock.y - 1; 
         } else {
-            targetY = airlock.y + 1; // Пол снизу
+            targetY = airlock.y + 1; 
         }
     }
 
-    // Ставим игрока в центр найденной клетки пола
     player.x = (targetX + 0.5) * TILE_SIZE;
     player.y = (targetY + 0.5) * TILE_SIZE;
 }
 
+// --- УПРАВЛЕНИЕ МЫШЬЮ: СТРОЙКА, ПАННИНГ ---
+
 canvas.addEventListener('mousedown', (e) => {
     if (currentState === STATE_SHIP && isBuildMenuOpen) {
-        if (e.button === 0) { 
+        
+        // СРЕДНЯЯ КНОПКА (Колесико) или ПРОБЕЛ + ЛКМ -> ПАННИНГ
+        if (e.button === 1 || (e.button === 0 && inputs.space)) { 
+            e.preventDefault();
+            isPanning = true;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            canvas.style.cursor = 'grabbing';
+            return;
+        }
+
+        // ЛЕВАЯ КНОПКА
+        if (e.button === 0 && !isPanning) { 
             isMouseDown = true; 
             
             if (selectedBuildItem) {
@@ -377,25 +430,65 @@ canvas.addEventListener('mousedown', (e) => {
 
                 if (modIndex !== -1) {
                     const mod = installedModules[modIndex];
-                    movingOriginalState = { ...mod }; 
-                    installedModules.splice(modIndex, 1);
-                    selectedBuildItem = mod.type;
-                    
-                    // СОХРАНЕНИЕ ПОВОРОТА:
-                    // Если ширина модуля не совпадает с базовой, значит он был повернут
-                    if (mod.w !== getBaseWidth(mod.type)) {
-                        buildRotation = 1;
-                    } else {
-                        buildRotation = 0;
+                    if (isInBuildBounds(mod.x, mod.y, mod.w, mod.h)) {
+                        movingOriginalState = { ...mod }; 
+                        installedModules.splice(modIndex, 1);
+                        selectedBuildItem = mod.type;
+                        
+                        if (mod.w !== getBaseWidth(mod.type)) {
+                            buildRotation = 1;
+                        } else {
+                            buildRotation = 0;
+                        }
                     }
                 }
             }
         }
+        // ПРАВАЯ КНОПКА
         if (e.button === 2) { 
             if (typeof isRightMouseDown !== 'undefined') isRightMouseDown = true;
             attemptDelete(); 
         }
     }
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (isPanning && isBuildMenuOpen) {
+        const dx = e.clientX - panStartX;
+        const dy = e.clientY - panStartY;
+        
+        viewOffset.x += dx;
+        viewOffset.y += dy;
+        
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+    }
+});
+
+window.addEventListener('mouseup', () => {
+    isPanning = false;
+    canvas.style.cursor = 'crosshair';
+});
+
+// --- ЗУМ НА КОЛЕСИКО ---
+window.addEventListener('wheel', (e) => {
+    if (currentState === STATE_SHIP && isBuildMenuOpen) {
+        e.preventDefault();
+        
+        const zoomSpeed = 0.1;
+        const delta = -Math.sign(e.deltaY) * zoomSpeed;
+        
+        let newZoom = buildZoom + delta;
+        newZoom = Math.max(ZOOM_MIN, Math.min(newZoom, ZOOM_MAX));
+        buildZoom = newZoom;
+    }
+}, { passive: false });
+
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') inputs.space = true;
+});
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') inputs.space = false;
 });
 
 canvas.addEventListener('contextmenu', (e) => {
@@ -404,11 +497,52 @@ canvas.addEventListener('contextmenu', (e) => {
 
 
 function drawInterior() {
+    ctx.save();
+    
+    // ВАЖНОЕ ИСПРАВЛЕНИЕ:
+    // main.js уже применил ctx.translate(viewOffset.x, viewOffset.y)
+    // Поэтому мы НЕ должны вызывать translate повторно.
+    // Мы применяем ТОЛЬКО Scale для зума.
+    
     if (isBuildMenuOpen) {
-        ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.beginPath();
-        for (let x = 0; x <= TARGET_COLS; x++) { ctx.moveTo(x*TILE_SIZE, 0); ctx.lineTo(x*TILE_SIZE, TARGET_ROWS*TILE_SIZE); }
-        for (let y = 0; y <= TARGET_ROWS; y++) { ctx.moveTo(0, y*TILE_SIZE); ctx.lineTo(TARGET_COLS*TILE_SIZE, y*TILE_SIZE); }
-        ctx.stroke(); ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, TARGET_COLS*TILE_SIZE, TARGET_ROWS*TILE_SIZE);
+        ctx.scale(buildZoom, buildZoom);
+    }
+
+    // --- ОТРИСОВКА СЕТКИ СТРОИТЕЛЬСТВА ---
+    if (isBuildMenuOpen) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#333'; 
+        ctx.beginPath();
+
+        // Вертикальные линии
+        for (let x = buildBounds.minX; x <= buildBounds.maxX; x++) {
+            ctx.moveTo(x * TILE_SIZE, buildBounds.minY * TILE_SIZE);
+            ctx.lineTo(x * TILE_SIZE, buildBounds.maxY * TILE_SIZE);
+        }
+        // Горизонтальные линии
+        for (let y = buildBounds.minY; y <= buildBounds.maxY; y++) {
+            ctx.moveTo(buildBounds.minX * TILE_SIZE, y * TILE_SIZE);
+            ctx.lineTo(buildBounds.maxX * TILE_SIZE, y * TILE_SIZE);
+        }
+        ctx.stroke();
+
+        // Граница зоны строительства
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+            buildBounds.minX * TILE_SIZE,
+            buildBounds.minY * TILE_SIZE,
+            (buildBounds.maxX - buildBounds.minX) * TILE_SIZE,
+            (buildBounds.maxY - buildBounds.minY) * TILE_SIZE
+        );
+        
+        // Затемнение
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        const infinite = 100000;
+        ctx.fillRect(-infinite, -infinite, infinite*2, buildBounds.minY * TILE_SIZE + infinite);
+        ctx.fillRect(-infinite, buildBounds.maxY * TILE_SIZE, infinite*2, infinite);
+        ctx.fillRect(-infinite, buildBounds.minY * TILE_SIZE, buildBounds.minX * TILE_SIZE + infinite, (buildBounds.maxY - buildBounds.minY) * TILE_SIZE);
+        ctx.fillRect(buildBounds.maxX * TILE_SIZE, buildBounds.minY * TILE_SIZE, infinite, (buildBounds.maxY - buildBounds.minY) * TILE_SIZE);
     }
 
     // Пол
@@ -418,7 +552,6 @@ function drawInterior() {
     // АНИМАЦИЯ ОШИБКИ
     if (detachAnimTimer > 0) {
         detachAnimTimer--;
-        
         let intensity = (Math.sin(detachAnimTimer * 0.3) + 1) / 2; 
         let fade = detachAnimTimer / 100;
         let alpha = intensity * fade * 0.8 + 0.2; 
@@ -431,11 +564,10 @@ function drawInterior() {
                 ctx.strokeRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             });
         }
-        
         if (detachAnimTimer === 0) detachedTiles = []; 
     }
 
-    // --- ФИКС БРОНИ ---
+    // --- СТЕНЫ ---
     ctx.fillStyle = '#37474f'; 
     const hullThick = TILE_SIZE * 0.35;
     
@@ -459,6 +591,7 @@ function drawInterior() {
 
     ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.beginPath(); shipTiles.forEach(t => ctx.strokeRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE)); ctx.stroke();
     
+    // МОДУЛИ
     installedModules.forEach(mod => {
         if (mod.type === 'engine') drawEngine(mod.x, mod.y, mod.w, mod.h);
         if (mod.type === 'bridge') drawCaptainBridge(mod.x, mod.y, mod.w, mod.h);
@@ -468,19 +601,41 @@ function drawInterior() {
     
     if (!isBuildMenuOpen) drawPlayer();
 
+    // КУРСОР СТРОИТЕЛЬСТВА
     if (isBuildMenuOpen) {
         const { gx, gy } = getGridFromMouse();
         
         if (selectedBuildItem) {
             let valid = false, w=1, h=1;
-            if (gx >= 0 && gx < TARGET_COLS && gy >= 0 && gy < TARGET_ROWS) {
+            
+            const modW = (selectedBuildItem === 'basic') ? 1 : getModuleWidth(selectedBuildItem);
+            const modH = (selectedBuildItem === 'basic') ? 1 : getModuleHeight(selectedBuildItem);
+            
+            const inBounds = isInBuildBounds(gx, gy, modW, modH);
+
+            if (inBounds) {
                 if (selectedBuildItem === 'basic') valid = canBuildFloor(gx, gy) && player.hullParts > 0;
-                else { valid = canBuildModule(gx, gy, selectedBuildItem); w = getModuleWidth(selectedBuildItem); h = getModuleHeight(selectedBuildItem); }
+                else { valid = canBuildModule(gx, gy, selectedBuildItem); w = modW; h = modH; }
+            } else {
+                valid = false;
+                w = modW; h = modH;
             }
-            ctx.strokeStyle = valid ? '#29b6f6' : '#ef5350'; ctx.fillStyle = valid ? 'rgba(41, 182, 246, 0.3)' : 'rgba(239, 83, 80, 0.3)';
-            ctx.lineWidth = 2; ctx.fillRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE); ctx.strokeRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE);
+
+            ctx.lineWidth = 2; 
+            if (inBounds) {
+                ctx.strokeStyle = valid ? '#29b6f6' : '#ef5350'; 
+                ctx.fillStyle = valid ? 'rgba(41, 182, 246, 0.3)' : 'rgba(239, 83, 80, 0.3)';
+            } else {
+                ctx.strokeStyle = '#ff0000'; 
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            }
+            
+            ctx.fillRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE); 
+            ctx.strokeRect(gx*TILE_SIZE, gy*TILE_SIZE, w*TILE_SIZE, h*TILE_SIZE);
         }
     }
+    
+    ctx.restore();
 }
 
 function drawHangar() {

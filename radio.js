@@ -704,10 +704,10 @@ window.requestDistressCall = function() {
     if (typeof player !== 'undefined') player.credits -= cost;
     if (window.updateCurrencyUI) window.updateCurrencyUI();
     
-    window.addToRadioLog("YOU: MAYDAY! MAYDAY! CURRENT COORDS", "#ff5252");
+    window.addToRadioLog("кто нибудь подбросте топлива", "#ff5252");
     
     setTimeout(() => {
-        window.addToRadioLog("RESCUE BOT: Coordinates received. Dropping fuel packs.", "#00e676");
+        window.addToRadioLog("скидываю ящики", "#00e676");
         if (window.tryAutoBuy) { window.tryAutoBuy('fuel', 2, 1, 0); }
         if (window.updateBuildUI) window.updateBuildUI();
     }, 2000);

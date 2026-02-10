@@ -1,3 +1,5 @@
+/* sector_anomaly.js */
+
 let blackHole = { x: 0, y: 0, radius: 0, diskParticles: [] }; 
 
 function generateBlackHole() {
@@ -35,13 +37,25 @@ function updateBlackHolePhysics() {
 
 function forceEmergencyWarp() {
     if (isWarping) return;
-    const rand = Math.random();
-    if (rand < 0.5) nextJumpTarget = 'station'; else if (rand < 0.9) nextJumpTarget = 'system'; else nextJumpTarget = 'black_hole';
+    
+    // [ИЗМЕНЕНИЕ] Теперь всегда варпаем в пустой сектор (null), без условий и затрат
+    nextJumpTarget = null; 
+    
     pendingJumpCost = 0; 
     if (typeof spectrumState !== 'undefined') spectrumState.hasScanned = false; 
 
     isWarping = true; warpState.phase = WARP_JUMP; warpState.timer = 0; warpFactor = 10; 
-    bgState.nextThemeIdx = Math.floor(Math.random() * SPACE_THEMES.length); bgState.progress = 0;
+    
+    // Примечание: SPACE_THEMES может быть не определен в текущей версии space_core, 
+    // но оставляю как было в оригинале, меняю только логику цели.
+    if (typeof SPACE_THEMES !== 'undefined') {
+        bgState.nextThemeIdx = Math.floor(Math.random() * SPACE_THEMES.length); 
+    } else if (typeof generateRandomTheme === 'function') {
+        // Фолбек на новую систему тем, если старой нет
+        bgState.nextTheme = generateRandomTheme();
+    }
+    
+    bgState.progress = 0;
 
     chargeContainer.style.display = 'block'; chargeBar.style.width = '100%'; chargeBar.style.backgroundColor = '#d500f9'; 
     jumpBtn.disabled = true; jumpBtn.innerHTML = "ЭКСТРЕННЫЙ ПРЫЖОК!"; jumpBtn.style.color = "#d500f9"; jumpBtn.style.borderColor = "#d500f9";

@@ -1,4 +1,5 @@
-/* space_core.js */
+
+/* space_core.js - FIXED: Smooth Autopilot Color Transitions */
 
 const mapUI = document.getElementById('mapUI');
 const jumpBtn = document.getElementById('jumpBtn');
@@ -291,15 +292,10 @@ function updateWarpLogic() {
                 } 
                 else if (targetType === 'station') {
                     currentSystemType = 'station';
-                    
-                    // ОТСТУП ОТ СТЕН (например, 100 пикселей)
                     const padding = 100; 
-
-                    // РАНДОМ СТРОГО В ПРЕДЕЛАХ СЕКТОРА С УЧЕТОМ ОТСТУПА
                     station.x = padding + Math.random() * (canvas.width - padding * 2);
                     station.y = padding + Math.random() * (canvas.height - padding * 2);
                     station.visible = true;
-
                     if (typeof generateStation === 'function') generateStation();
                 }
                 else if (targetType === 'system') {
@@ -316,10 +312,11 @@ function updateWarpLogic() {
                 }
             }
             
-            // Генерируем случайную тему ТОЛЬКО если это не прыжок к игроку
-            if (!autoJumpState.active || autoJumpState.finalTargetType !== 'player') {
+            // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: БЛОКИРОВКА ПЕРЕГЕНЕРАЦИИ ТЕМЫ В ЦИКЛЕ АВТОПИЛОТА ---
+            if (!autoJumpState.active) {
                 bgState.nextTheme = generateRandomTheme();
             }
+            // ----------------------------------------------------------------------------
             
             if (!autoJumpState.active) jumpBtn.innerHTML = "ПРИБЫТИЕ..."; 
         }
@@ -347,15 +344,18 @@ function updateWarpLogic() {
                 warpFactor = 0;
                 chargeBar.style.width = '0%';
                 
-                // Не меняем тему на случайную при промежуточных прыжках к игроку
+                // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ПЛАВНОСТИ ---
                 if (autoJumpState.finalTargetType !== 'player') {
-                    bgState.currentTheme = bgState.nextTheme;
-                    bgState.nextTheme = generateRandomTheme();
+                    // ВМЕСТО ЖЕСТКОГО ПРИСВОЕНИЯ nextTheme, МЫ БЕРЕМ ТЕКУЩУЮ ИНТЕРПОЛЯЦИЮ
+                    // Это позволяет избежать скачка, если progress не успел дойти до 1.0
+                    bgState.currentTheme = getInterpolatedPalette(bgState.progress);
+                    
+                    // Генерируем цель для СЛЕДУЮЩЕГО прыжка
+                    bgState.nextTheme = generateRandomTheme(); 
                 }
-                // Если мы у друга, блокируем перезапись темы темой "из буфера"
-                if (!autoJumpState.active || autoJumpState.finalTargetType !== 'player') {
-                    bgState.currentTheme = bgState.nextTheme; 
-                }
+                // Если прыгаем к игроку - не меняем тему, так как синхронизация произойдет позже
+                // -------------------------------------
+                
                 bgState.progress = 0;
                 
                 return; 
@@ -395,6 +395,7 @@ function updateWarpLogic() {
             warpState.phase = WARP_IDLE;
             chargeContainer.style.display = 'none'; chargeBar.style.width = '0%'; 
             
+            // Завершаем переход цвета
             bgState.currentTheme = bgState.nextTheme; 
             bgState.progress = 0;
 
