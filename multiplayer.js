@@ -88,6 +88,8 @@ window.broadcastMarketUpdate = function() {
 // --- ПОДПИСКА И ПОЛУЧЕНИЕ ДАННЫХ ---
 let playersRef = null;
 
+/* multiplayer.js */
+
 function subscribeToCurrentSystem() {
     if (playersRef) playersRef.off();
 
@@ -95,7 +97,7 @@ function subscribeToCurrentSystem() {
     playersRef.on('value', (snapshot) => {
         const all = snapshot.val();
         
-        // Если все вышли
+        // If everyone left
         if (!all) {
             Object.keys(mpState.remotePlayers).forEach(uid => {
                 if (!mpState.remotePlayers[uid].isLeaving) {
@@ -111,7 +113,7 @@ function subscribeToCurrentSystem() {
         const now = Date.now();
         const activeUids = new Set();
 
-        // 1. РЫНОК
+        // 1. MARKET DATA SYNC
         const hostData = all[mpState.currentSystemId];
         if (hostData && hostData.marketData) {
             if (hostData.marketData.stock) marketState.stationStock = hostData.marketData.stock;
@@ -126,48 +128,66 @@ function subscribeToCurrentSystem() {
             }
         }
 
-        // 2. ИГРОКИ
+        // 2. PLAYER SYNC
         Object.keys(all).forEach(uid => {
             if (uid === myUid) return;
             
             const p = all[uid];
-            if (now - p.timestamp > 15000) return; // Таймаут
+            if (now - p.timestamp > 15000) return; // Timeout
 
             if (p.currentSystemId === mpState.currentSystemId) {
                 activeUids.add(uid);
                 
-                // Проверяем статус "Улетает" из базы
                 const isRemoteWarpingOut = p.isWarpingOut === true;
+                const oldP = mpState.remotePlayers[uid];
 
-                if (!mpState.remotePlayers[uid]) {
-                    // --- НОВЫЙ ИГРОК ---
+                if (!oldP) {
+                    // --- NEW PLAYER ENTRY ---
                     mpState.remotePlayers[uid] = p;
+                    // Initialize animation state
                     mpState.remotePlayers[uid].arrivalAnim = mpState.firstLoad ? 1 : 0;
                     mpState.remotePlayers[uid].isLeaving = isRemoteWarpingOut;
+                    
+                    // [FIX] Calculate fixed start position ONCE to prevent looping/jitter
+                    if (p.mapPos) {
+                        mpState.remotePlayers[uid].arrivalStartPos = {
+                            x: p.mapPos.x - Math.cos(p.mapPos.angle) * 1200,
+                            y: p.mapPos.y - Math.sin(p.mapPos.angle) * 1200
+                        };
+                    }
+                    
                     if (isRemoteWarpingOut) mpState.remotePlayers[uid].departureAnim = 0;
 
                 } else {
-                    // --- ОБНОВЛЕНИЕ ---
-                    const oldP = mpState.remotePlayers[uid];
+                    // --- UPDATE EXISTING PLAYER ---
                     
-                    // Если вдруг сервер говорит "он улетает", а у нас еще нет -> запускаем анимацию
+                    // Trigger departure if server says so
                     if (isRemoteWarpingOut && !oldP.isLeaving) {
                         oldP.isLeaving = true;
                         oldP.departureAnim = 0;
                     }
 
-                    // Обновляем данные, сохраняя анимации
+                    // Preserve local animation states
                     mpState.remotePlayers[uid] = {
                         ...p,
-                        arrivalAnim: oldP.arrivalAnim !== undefined ? oldP.arrivalAnim : 1,
+                        arrivalAnim: oldP.arrivalAnim, // Keep local progress
+                        arrivalStartPos: oldP.arrivalStartPos, // [FIX] Keep fixed start position
                         departureAnim: oldP.departureAnim !== undefined ? oldP.departureAnim : 0,
-                        isLeaving: oldP.isLeaving || isRemoteWarpingOut // Если локально уже улетает или сервер сказал
+                        isLeaving: oldP.isLeaving || isRemoteWarpingOut
                     };
+                    
+                    // Safety: If somehow arrivalStartPos was lost (legacy data), regen it
+                    if (!mpState.remotePlayers[uid].arrivalStartPos && p.mapPos) {
+                        mpState.remotePlayers[uid].arrivalStartPos = {
+                            x: p.mapPos.x - Math.cos(p.mapPos.angle) * 1200,
+                            y: p.mapPos.y - Math.sin(p.mapPos.angle) * 1200
+                        };
+                    }
                 }
             }
         });
 
-        // 3. УДАЛЕННЫЕ (Кого нет в базе, но были у нас)
+        // 3. REMOVE GHOSTS
         Object.keys(mpState.remotePlayers).forEach(uid => {
             if (!activeUids.has(uid)) {
                 if (!mpState.remotePlayers[uid].isLeaving) {
@@ -266,7 +286,7 @@ window.syncWorldWithPlayer = function(playerData) {
     });
 };
 
-// --- ОТРИСОВКА ---
+/* multiplayer.js */
 
 window.drawRemotePlayers = function(ctx, currentMode, viewOffset, tileSize, globalAlpha = 1, parallaxScale = 1) {
     const uids = Object.keys(mpState.remotePlayers);
@@ -275,58 +295,54 @@ window.drawRemotePlayers = function(ctx, currentMode, viewOffset, tileSize, glob
     uids.forEach(uid => {
         const p = mpState.remotePlayers[uid];
 
-        // АНИМАЦИЯ ВЛЕТА (Если не улетает)
+        // 1. ARRIVAL LOGIC
         let isArriving = false;
         if (!p.isLeaving && p.arrivalAnim < 1) {
-            p.arrivalAnim += 0.04;
+            p.arrivalAnim += 0.02; // Slower, smoother arrival
             if (p.arrivalAnim > 1) p.arrivalAnim = 1;
             isArriving = true;
         }
 
-        // АНИМАЦИЯ УЛЕТА (Гиперпрыжок)
+        // 2. DEPARTURE LOGIC
         let isDeparting = false;
         if (p.isLeaving) {
             isDeparting = true;
-            p.departureAnim += 0.03; // Чуть медленнее, чтобы было видно ускорение
-            
-            // Удаляем объект после завершения анимации
+            p.departureAnim += 0.04; 
             if (p.departureAnim >= 1) {
                 delete mpState.remotePlayers[uid];
                 return; 
             }
         }
 
+        // --- MAP MODE RENDER ---
         if (currentMode === 2 && p.mapPos) { 
             let renderX = p.mapPos.x;
             let renderY = p.mapPos.y;
             let stretchScale = 1;
 
-            if (isArriving) {
-                // ПРИЛЕТ: Торможение
+            if (isArriving && p.arrivalStartPos) {
+                // [FIX] Use the locked start position to prevent jitter/looping
                 const t = 1 - Math.pow(1 - p.arrivalAnim, 3);
-                const startX = p.mapPos.x - Math.cos(p.mapPos.angle) * 1200;
-                const startY = p.mapPos.y - Math.sin(p.mapPos.angle) * 1200;
-                renderX = startX + (p.mapPos.x - startX) * t;
-                renderY = startY + (p.mapPos.y - startY) * t;
+                
+                // Interpolate from fixed start to current server position
+                renderX = p.arrivalStartPos.x + (p.mapPos.x - p.arrivalStartPos.x) * t;
+                renderY = p.arrivalStartPos.y + (p.mapPos.y - p.arrivalStartPos.y) * t;
+                
                 stretchScale = 1 + (1 - t) * 15; 
             } 
             else if (isDeparting) {
-                // УЛЕТ: Ускорение вперед
-                const t = Math.pow(p.departureAnim, 3); // Экспоненциальный разгон
+                const t = Math.pow(p.departureAnim, 4); // Stronger acceleration curve
                 
-                // Летит ВПЕРЕД по своему курсу на 2000 пикселей
                 const endX = p.mapPos.x + Math.cos(p.mapPos.angle) * 2000;
                 const endY = p.mapPos.y + Math.sin(p.mapPos.angle) * 2000;
                 
                 renderX = p.mapPos.x + (endX - p.mapPos.x) * t;
                 renderY = p.mapPos.y + (endY - p.mapPos.y) * t;
                 
-                // Растягивание
-                stretchScale = 1 + t * 30; 
+                stretchScale = 1 + t * 40; 
             }
 
-            // ПРИМЕНЕНИЕ ПАРАЛЛАКСА
-            // Это нужно, чтобы если МЫ (наблюдатель) варпаем, другие игроки тоже исчезали плавно
+            // Calculate Screen Coords
             const cx = ctx.canvas.width / 2;
             const cy = ctx.canvas.height / 2;
             const screenX = cx + (renderX - cx) * parallaxScale;
@@ -337,29 +353,40 @@ window.drawRemotePlayers = function(ctx, currentMode, viewOffset, tileSize, glob
             
             ctx.translate(screenX, screenY);
             ctx.rotate(p.mapPos.angle);
-            ctx.scale(stretchScale * parallaxScale, parallaxScale); 
 
-            // Корабль
+            // [FIX] TAIL STRETCHING
+            // We shift the origin (Translate) -> Scale -> Shift back
+            // Assuming the ship 'nose' is at roughly X=10. We want X=10 to stay at X=10.
+            if (stretchScale > 1) {
+                ctx.translate(10, 0); // Move pivot to the nose
+                ctx.scale(stretchScale * parallaxScale, parallaxScale); 
+                ctx.translate(-10, 0); // Move drawing back
+            } else {
+                ctx.scale(parallaxScale, parallaxScale);
+            }
+
+            // Draw Ship
             ctx.shadowBlur = 10; ctx.shadowColor = '#ff1744';
             ctx.fillStyle = '#ff1744'; 
             ctx.beginPath(); 
             ctx.moveTo(10, 0); ctx.lineTo(-8, 6); ctx.lineTo(-4, 0); ctx.lineTo(-8, -6); 
             ctx.fill();
 
-            // Эффекты двигателя
+            // Engine Effects
             if (isArriving) {
                 ctx.fillStyle = 'rgba(255, 23, 68, 0.4)';
                 ctx.fillRect(-60, -2, 50, 4);
             }
             if (isDeparting) {
                 ctx.fillStyle = 'rgba(255, 23, 68, 0.8)';
-                // Шлейф растет при разгоне
-                ctx.fillRect(-40 - (p.departureAnim * 50), -3, 30 + (p.departureAnim * 100), 6);
+                // Trail scales naturally with the ship due to the context scale
+                ctx.fillRect(-20, -3, 15, 6);
             }
 
             ctx.restore();
             
-            if (globalAlpha > 0.5 && !isDeparting) {
+            // Name tag (Only show if close and not warping out)
+            if (globalAlpha > 0.5 && !isDeparting && !isArriving) {
                 ctx.save();
                 ctx.globalAlpha = globalAlpha;
                 ctx.fillStyle = '#ff1744';
@@ -369,8 +396,11 @@ window.drawRemotePlayers = function(ctx, currentMode, viewOffset, tileSize, glob
             }
         }
         
+        // --- STATION/HANGAR MODE RENDER (Unchanged) ---
         if (currentMode === 3 && (p.locationMode === 3 || p.locationMode === 1) && !isDeparting) {
-            const rx = p.stationPos.x;
+            // (Your existing Hangar drawing code goes here...)
+            // Just ensure you paste the hangar rendering block from your original file here
+             const rx = p.stationPos.x;
             const ry = p.stationPos.y;
             const scale = tileSize / 50;
             

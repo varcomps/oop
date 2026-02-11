@@ -114,3 +114,16 @@ function renderSystem(cx, cy, parallaxScale, objAlpha) {
         starSystem.planets = [];
 }
 }
+/* В конец файла sector_system.js */
+
+window.getSystemSaveData = function() {
+    return starSystem;
+};
+
+window.restoreSystemSaveData = function(data) {
+    if (data) {
+        starSystem = data;
+        // Убеждаемся, что система активна после загрузки
+        starSystem.active = true; 
+    }
+};

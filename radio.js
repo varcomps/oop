@@ -1,5 +1,4 @@
-
-/* radio.js - UPDATED: Mail System & Admin Tools */
+/* radio.js - FULL VERSION: NO MAIL SYSTEM */
 
 // ==========================================
 // 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И НАСТРОЙКИ
@@ -14,13 +13,10 @@ let activeChatId = null;
 window.isRadioOpen = false;
 window.activeMarketRumor = null; 
 window.privateChats = []; 
-window.userMailbox = []; // Локальное хранилище писем
-window.selectedMailId = null;
 
 // Хранилище слушателей Firebase
 let contactsRef = null;
 let requestsRef = null;
-let mailRef = null; // Слушатель почты
 let activeChatListeners = {}; 
 
 // --- ГЕНЕРАТОР ПРОЦЕДУРНЫХ ДИАЛОГОВ (PVE) ---
@@ -139,31 +135,6 @@ function startRadioListeners(user) {
         for(let uid in reqs) reqMap[uid] = reqs[uid].name || "Unknown";
         syncContactsList(user, reqMap, 'pending');
     });
-
-    // 3. ПОЧТА (НОВОЕ)
-    mailRef = firebase.database().ref('users/' + user.uid + '/mail');
-    mailRef.on('value', (snapshot) => {
-        const rawMail = snapshot.val() || {};
-        window.userMailbox = [];
-        
-        Object.keys(rawMail).forEach(key => {
-            window.userMailbox.push({
-                id: key,
-                ...rawMail[key]
-            });
-        });
-
-        // Сортировка: Свежие сверху
-        window.userMailbox.sort((a,b) => b.timestamp - a.timestamp);
-        
-        // Обновляем UI если открыта вкладка почты
-        if (window.isRadioOpen && currentRadioTab === 'mail') {
-            renderMailboxList();
-            if (window.selectedMailId) renderMailView(window.selectedMailId);
-        }
-        window.updateRadioBadges();
-        // Бейдж непрочитанных (можно добавить в будущем)
-    });
 }
 
 function syncContactsList(user, data, status) {
@@ -257,11 +228,9 @@ function subscribeToMessagesForUser(user, targetUid) {
 function cleanupListeners() {
     if (contactsRef) contactsRef.off();
     if (requestsRef) requestsRef.off();
-    if (mailRef) mailRef.off();
     for (let id in activeChatListeners) activeChatListeners[id].off();
     activeChatListeners = {};
     window.privateChats = [];
-    window.userMailbox = [];
 }
 
 // ==========================================
@@ -441,46 +410,6 @@ const radioStyles = `
     
     .input-error { animation: blinkError 0.4s ease-in-out; border-color: #ff1744 !important; }
     @keyframes blinkError { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-
-    /* MAIL STYLES */
-    .mail-split { display: flex; flex: 1; height: 100%; overflow: hidden; }
-    .mail-list-col { width: 220px; border-right: 1px solid #333; background: #080a0c; overflow-y: auto; }
-    .mail-content-col { flex: 1; background: #0b0f14; display: flex; flex-direction: column; overflow-y: auto; padding: 20px; }
-    
-    .mail-item {
-        padding: 12px; border-bottom: 1px solid #222; cursor: pointer;
-        display: flex; flex-direction: column; gap: 4px;
-        transition: 0.2s;
-    }
-    .mail-item:hover { background: #141619; }
-    .mail-item.selected { background: #1a2026; border-left: 3px solid #ffd700; }
-    .mail-item.claimed { opacity: 0.5; filter: grayscale(1); }
-    .mail-sender { font-family: 'Orbitron'; font-size: 11px; color: #ffd700; }
-    .mail-title { font-family: 'Share Tech Mono'; font-size: 12px; color: #fff; font-weight: bold; }
-    
-    .mail-view-header { border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 15px; }
-    .mv-subject { font-family: 'Orbitron'; font-size: 18px; color: #fff; margin-bottom: 5px; }
-    .mv-meta { font-family: 'Share Tech Mono'; font-size: 11px; color: #666; }
-    .mv-body { font-family: 'Roboto Condensed'; font-size: 14px; color: #ccc; line-height: 1.5; white-space: pre-wrap; flex: 1; }
-    
-    .rewards-section { margin-top: 20px; border-top: 1px solid #333; padding-top: 10px; }
-    .rewards-title { font-family: 'Orbitron'; font-size: 12px; color: #00e5ff; margin-bottom: 10px; }
-    .rewards-grid { display: flex; gap: 10px; flex-wrap: wrap; }
-    
-    .reward-box {
-        width: 50px; height: 50px; background: #1c2329; border: 1px solid #37474f;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; position: relative; transition: 0.2s;
-    }
-    .reward-box:hover:not(.claimed) { border-color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
-    .reward-box.claimed { opacity: 0.3; cursor: default; border-color: #222; }
-    .r-icon { font-size: 10px; font-family: 'Orbitron'; color: #ccc; text-align: center; line-height: 1.2; }
-    .r-qty { position: absolute; bottom: 2px; right: 2px; font-size: 9px; color: #fff; font-family: monospace; }
-    
-    /* ADMIN TOOLS CSS */
-    .admin-form-row { display: flex; gap: 5px; margin-top: 5px; }
-    .admin-input { background: #000; border: 1px solid #ff5252; color: #fff; padding: 4px; font-size: 10px; flex: 1; font-family: monospace; }
-    .admin-select { background: #000; border: 1px solid #ff5252; color: #fff; font-size: 10px; font-family: monospace; }
 `;
 
 function injectRadioStyles() {
@@ -498,6 +427,7 @@ function initRadioInterface() {
     const old = document.getElementById('radioUI');
     if (old) old.remove();
 
+    // Удалена кнопка и view для почты
     const html = `
     <div id="radioUI">
         <div class="radio-header" id="radioHeader">
@@ -507,7 +437,6 @@ function initRadioInterface() {
         <div class="radio-tabs">
             <button class="radio-tab-btn active" id="tab-general" onclick="switchRadioTab('general')">PUBLIC ETHER</button>
             <button class="radio-tab-btn" id="tab-personal" onclick="switchRadioTab('personal')">ENCRYPTED</button>
-            <button class="radio-tab-btn" id="tab-mail" onclick="switchRadioTab('mail')">STAR MAIL</button>
         </div>
         <div class="radio-body"> 
             <div id="view-general" class="radio-view active">
@@ -539,14 +468,6 @@ function initRadioInterface() {
                     </div>
                 </div>
             </div>
-            <div id="view-mail" class="radio-view">
-                <div class="mail-split">
-                    <div class="mail-list-col" id="mailList"></div>
-                    <div class="mail-content-col" id="mailContent">
-                        <div style="color:#444; text-align:center; margin-top:100px; font-family:'Orbitron'">SELECT TRANSMISSION</div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>`;
 
@@ -556,8 +477,6 @@ function initRadioInterface() {
     document.getElementById('chatInput').addEventListener('keydown', (e) => { e.stopPropagation(); if(e.key === 'Enter') sendPrivateMessage(); });
 
     makeDraggable(document.getElementById('radioUI'), document.getElementById('radioHeader'));
-    
-    // Inject admin tools logic
 }
 
 
@@ -581,8 +500,6 @@ window.toggleRadio = function(state) {
                     const h = document.getElementById('chat-history');
                     if(h) h.scrollTop = h.scrollHeight;
                 }
-            } else if (currentRadioTab === 'mail') {
-                renderMailboxList();
             } else {
                 const log = document.getElementById('radioLog');
                 if(log) log.scrollTop = log.scrollHeight;
@@ -596,10 +513,14 @@ window.switchRadioTab = function(tab) {
     currentRadioTab = tab;
     document.querySelectorAll('.radio-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.radio-view').forEach(v => v.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
-    document.getElementById(`view-${tab}`).classList.add('active');
+    
+    const btn = document.getElementById(`tab-${tab}`);
+    if(btn) btn.classList.add('active');
+    
+    const view = document.getElementById(`view-${tab}`);
+    if(view) view.classList.add('active');
+    
     if (tab === 'personal') renderContactList();
-    if (tab === 'mail') renderMailboxList();
 };
 
 window.confirmNewChat = async function() {
@@ -756,165 +677,6 @@ window.sendPrivateMessage = function() {
     if (!text) return;
     input.value = '';
     window.sendFirebaseMessage(activeChatId, text);
-};
-
-// ==========================================
-// MAIL SYSTEM UI LOGIC
-// ==========================================
-
-function renderMailboxList() {
-    const list = document.getElementById('mailList');
-    if (!list) return;
-    list.innerHTML = '';
-    
-    if (window.userMailbox.length === 0) {
-        list.innerHTML = '<div style="padding:20px;text-align:center;color:#444;font-size:10px;">EMPTY</div>';
-        document.getElementById('mailContent').innerHTML = '<div style="color:#444; text-align:center; margin-top:100px; font-family:\'Orbitron\'">NO DATA</div>';
-        return;
-    }
-
-    window.userMailbox.forEach(mail => {
-        const item = document.createElement('div');
-        item.className = 'mail-item';
-        if (window.selectedMailId === mail.id) item.classList.add('selected');
-        if (mail.isClaimed) item.classList.add('claimed');
-
-        const date = new Date(mail.timestamp).toLocaleDateString();
-        
-        item.innerHTML = `
-            <div class="mail-sender">${mail.sender || 'System'} <span style="float:right; opacity:0.5">${date}</span></div>
-            <div class="mail-title">${mail.title}</div>
-        `;
-        
-        item.onclick = () => {
-            window.selectedMailId = mail.id;
-            renderMailboxList();
-            renderMailView(mail.id);
-        };
-        list.appendChild(item);
-    });
-}
-
-function renderMailView(mailId) {
-    const container = document.getElementById('mailContent');
-    const mail = window.userMailbox.find(m => m.id === mailId);
-    if (!mail) return;
-
-    const date = new Date(mail.timestamp).toLocaleString();
-    let rewardsHTML = '';
-
-    if (mail.rewards && mail.rewards.length > 0) {
-        rewardsHTML = `<div class="rewards-section"><div class="rewards-title">ATTACHMENTS</div><div class="rewards-grid">`;
-        
-        mail.rewards.forEach((r, idx) => {
-            const isClaimed = r.claimed ? 'claimed' : '';
-            let icon = '';
-            let label = '';
-            
-            if (r.type === 'credits') { icon = 'SC'; label = r.amount; }
-            else if (r.type === 'fuel') { icon = 'FUEL'; label = r.amount; }
-            else if (r.type === 'item') { icon = 'BOX'; label = '1'; }
-
-            rewardsHTML += `
-                <div class="reward-box ${isClaimed}" onclick="claimReward('${mailId}', ${idx})">
-                    <div class="r-icon">${icon}</div>
-                    <div class="r-qty">${label}</div>
-                </div>
-            `;
-        });
-        rewardsHTML += `</div></div>`;
-    }
-
-    container.innerHTML = `
-        <div class="mail-view-header">
-            <div class="mv-subject">${mail.title}</div>
-            <div class="mv-meta">FROM: ${mail.sender} | ${date}</div>
-        </div>
-        <div class="mv-body">${mail.body}</div>
-        ${rewardsHTML}
-    `;
-}
-
-window.claimReward = function(mailId, rIdx) {
-    const mail = window.userMailbox.find(m => m.id === mailId);
-    if (!mail || !mail.rewards[rIdx]) return;
-    const reward = mail.rewards[rIdx];
-
-    if (reward.claimed) return;
-
-    // Логика выдачи
-    let success = false;
-    
-    if (reward.type === 'credits') {
-        player.credits += reward.amount;
-        success = true;
-    } else if (reward.type === 'fuel') {
-        if(window.addFuel) window.addFuel(reward.amount);
-        else player.fuel += reward.amount; // fallback
-        success = true;
-    } else if (reward.type === 'item') {
-        // Проверка места
-        if (window.placedStorageItems.length < 100) { // 10x10 grid
-            // Ищем свободное место (тупой перебор)
-            let foundX = -1, foundY = -1;
-            const gridW = 10; const gridH = 10;
-            
-            // Получаем маску занятости
-            let occupied = new Array(gridW * gridH).fill(false);
-            window.placedStorageItems.forEach(it => {
-               for(let i=0; i<it.w; i++) for(let j=0; j<it.h; j++) {
-                   let idx = (it.y + j) * gridW + (it.x + i);
-                   if(idx >= 0 && idx < occupied.length) occupied[idx] = true;
-               }
-            });
-            
-            // Ищем место 1x1 (так как награды обычно простые)
-            for(let y=0; y<gridH; y++) {
-                for(let x=0; x<gridW; x++) {
-                    if(!occupied[y*gridW + x]) { foundX = x; foundY = y; break; }
-                }
-                if(foundX !== -1) break;
-            }
-            
-            if (foundX !== -1) {
-                const newItem = {
-                    id: Date.now() + Math.random(),
-                    x: foundX, y: foundY, w: 1, h: 1,
-                    type: reward.subtype, // item ID from DB
-                    name: "GIFT", // Should look up name ideally
-                    rarity: 'common'
-                };
-                window.placedStorageItems.push(newItem);
-                success = true;
-                if(window.renderStorageGrid) window.renderStorageGrid();
-            } else {
-                alert("STORAGE FULL");
-            }
-        } else {
-            alert("STORAGE FULL");
-        }
-    }
-
-    if (success) {
-        // Обновляем Firebase
-        const user = firebase.auth().currentUser;
-        if (user) {
-            firebase.database().ref(`users/${user.uid}/mail/${mailId}/rewards/${rIdx}`).update({ claimed: true });
-            
-            // Проверяем, все ли забрали
-            const allClaimed = mail.rewards.every((r, i) => i === rIdx ? true : r.claimed);
-            if (allClaimed) {
-                firebase.database().ref(`users/${user.uid}/mail/${mailId}`).update({ isClaimed: true });
-            }
-        }
-        
-        // Обновляем локально для мгновенного отклика
-        reward.claimed = true;
-        if (window.updateCurrencyUI) window.updateCurrencyUI();
-        if (window.updateBuildUI) window.updateBuildUI();
-        renderMailView(mailId);
-    }
-    setTimeout(() => window.updateRadioBadges(), 500);
 };
 
 // ==========================================
@@ -1144,24 +906,16 @@ window.updateRadioBadges = function() {
         });
     }
 
-    // 2. Считаем непрочитанные письма (те, где награда не забрана или просто новые)
-    // В текущей системе считаем "не полученные" (isClaimed != true) как важные
-    let unreadSystem = 0;
-    if (window.userMailbox) {
-        unreadSystem = window.userMailbox.filter(m => !m.isClaimed).length;
-    }
-
     // 3. Обновляем UI
     const badgeP = document.getElementById('radioBadgePlayer');
-    const badgeS = document.getElementById('radioBadgeSystem');
+    const badgeS = document.getElementById('radioBadgeSystem'); // Удалено использование
 
     if (badgeP) {
         badgeP.innerText = unreadPlayers > 9 ? '9+' : unreadPlayers;
         badgeP.style.display = unreadPlayers > 0 ? 'flex' : 'none';
     }
-
+    
     if (badgeS) {
-        badgeS.innerText = unreadSystem > 9 ? '9+' : unreadSystem;
-        badgeS.style.display = unreadSystem > 0 ? 'flex' : 'none';
+        badgeS.style.display = 'none';
     }
 };

@@ -87,3 +87,14 @@ function renderBlackHole(cx, cy, parallaxScale, objAlpha) {
         ctx.globalAlpha = 1;
     }
 }
+/* В конец файла sector_anomaly.js */
+
+window.getAnomalySaveData = function() {
+    return blackHole;
+};
+
+window.restoreAnomalySaveData = function(data) {
+    if (data) {
+        blackHole = data;
+    }
+};

@@ -1,4 +1,3 @@
-
 // firebase_manager.js
 
 const firebaseConfig = {
@@ -273,43 +272,4 @@ window.findUserByNickname = async function(nickname) {
 
 window.getCurrentUserUid = function() {
     return currentUser ? currentUser.uid : null;
-};
-
-// === MAIL SYSTEM FUNCTIONS ===
-
-window.sendMailToUser = async function(nickname, mailData) {
-    const targetUid = await window.findUserByNickname(nickname);
-    if (!targetUid) {
-        alert("USER NOT FOUND");
-        return;
-    }
-    
-    firebase.database().ref(`users/${targetUid}/mail`).push(mailData)
-    .then(() => {
-        alert("MAIL SENT TO " + nickname);
-    })
-    .catch(err => console.error(err));
-};
-
-window.sendMailToAll = async function(mailData) {
-    if (!confirm("SEND TO ALL PLAYERS?")) return;
-    
-    // Получаем список всех ников/UID
-    const snapshot = await db.ref('usernames').once('value');
-    const users = snapshot.val();
-    
-    if (!users) return;
-    
-    let count = 0;
-    const updates = {};
-    
-    Object.values(users).forEach(uid => {
-        const newMailKey = db.ref(`users/${uid}/mail`).push().key;
-        updates[`users/${uid}/mail/${newMailKey}`] = mailData;
-        count++;
-    });
-    
-    db.ref().update(updates).then(() => {
-        alert(`MAIL SENT TO ${count} PILOTS`);
-    });
 };

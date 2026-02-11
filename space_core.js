@@ -581,6 +581,16 @@ window.getVisualState = function() {
         state.marketData = window.getMarketSaveData();
     }
     
+    // [НОВОЕ] Сохранение звездной системы
+    if (currentSystemType === 'system' && window.getSystemSaveData) {
+        state.systemData = window.getSystemSaveData();
+    }
+
+    // [НОВОЕ] Сохранение черной дыры
+    if (currentSystemType === 'black_hole' && window.getAnomalySaveData) {
+        state.anomalyData = window.getAnomalySaveData();
+    }
+    
     return state;
 };
 
@@ -599,24 +609,30 @@ window.setVisualState = function(data) {
         bgState.progress = 0;
     }
 
+    // ВОССТАНОВЛЕНИЕ СТАНЦИИ
     if (data.stationData) {
         station.x = data.stationData.x;
         station.y = data.stationData.y;
         station.visible = data.stationData.visible;
     }
 
-    // === ИСПРАВЛЕНИЕ НАЧАЛО ===
-    // Если загрузились в системе со станцией, нужно заново сгенерировать её структуру (плитки)
     if (currentSystemType === 'station') {
         if (typeof generateStation === 'function') {
             generateStation(); 
         }
+        if (data.marketData && window.restoreMarketSaveData) {
+            window.restoreMarketSaveData(data.marketData);
+        }
     }
-    // === ИСПРАВЛЕНИЕ КОНЕЦ ===
 
-    // Если есть рыночные данные, восстанавливаем их
-    if (data.marketData && window.restoreMarketSaveData) {
-        window.restoreMarketSaveData(data.marketData);
+    // [НОВОЕ] ВОССТАНОВЛЕНИЕ ЗВЕЗДНОЙ СИСТЕМЫ
+    if (currentSystemType === 'system' && data.systemData && window.restoreSystemSaveData) {
+        window.restoreSystemSaveData(data.systemData);
+    }
+
+    // [НОВОЕ] ВОССТАНОВЛЕНИЕ ЧЕРНОЙ ДЫРЫ
+    if (currentSystemType === 'black_hole' && data.anomalyData && window.restoreAnomalySaveData) {
+        window.restoreAnomalySaveData(data.anomalyData);
     }
 
     if (window.drawSpaceBackground) window.drawSpaceBackground(currentState === STATE_MAP);
