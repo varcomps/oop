@@ -271,28 +271,6 @@ function updateWarpLogic() {
         }
     } 
     else if (warpState.phase === WARP_COAST) {
-        // --- ИНТЕГРАЦИЯ СЮЖЕТА В ВАРП ---
-        
-        // 1. Если это начало фазы полета (timer === 1), пробуем запустить сцену
-        if (warpState.timer === 1) {
-            if (window.StoryManager) {
-                // Передаем true, чтобы сказать менеджеру "мы в варпе"
-                window.StoryManager.checkTrigger(true); 
-            }
-        }
-
-        // 2. Если сцена активна, мы ЗАМОРАЖИВАЕМ таймер варпа.
-        // Корабль летит бесконечно, пока сцена не закончится.
-        if (window.StoryManager && window.StoryManager.isActive()) {
-            warpFactor = 150; // Поддерживаем максимальную скорость визуально
-            if (!autoJumpState.active) jumpBtn.innerHTML = "ВХОДЯЩИЙ СИГНАЛ...";
-            
-            // НЕ увеличиваем warpState.timer, чтобы не перейти в WARP_EXIT
-            return; 
-        }
-        
-        // ---------------------------------
-
         warpState.timer++; 
         
         if (warpState.timer === 20) { 
@@ -303,12 +281,11 @@ function updateWarpLogic() {
             warpState.phase = WARP_EXIT; 
             warpState.timer = 0; 
             
-            // ... (остальной код выхода из варпа без изменений) ...
             if (autoJumpState.active && autoJumpState.jumpsLeft > 0) {
                 currentSystemType = null; 
             } 
             else {
-                const targetType = autoJumpState.active ? autoJumpState.finalTargetType : (window.nextJumpTarget || 'system');
+                const targetType = autoJumpState.active ? autoJumpState.finalTargetType : nextJumpTarget;
 
                 if (targetType === 'player' && autoJumpState.targetPlayerData) {
                     if (window.syncWorldWithPlayer) window.syncWorldWithPlayer(autoJumpState.targetPlayerData);
@@ -335,9 +312,11 @@ function updateWarpLogic() {
                 }
             }
             
+            // --- ВАЖНОЕ ИСПРАВЛЕНИЕ: БЛОКИРОВКА ПЕРЕГЕНЕРАЦИИ ТЕМЫ В ЦИКЛЕ АВТОПИЛОТА ---
             if (!autoJumpState.active) {
                 bgState.nextTheme = generateRandomTheme();
             }
+            // ----------------------------------------------------------------------------
             
             if (!autoJumpState.active) jumpBtn.innerHTML = "ПРИБЫТИЕ..."; 
         }
