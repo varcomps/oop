@@ -1,4 +1,4 @@
-// firebase_manager.js
+/* firebase_manager.js - FIXED: New Player Ship Generation */
 
 const firebaseConfig = {
   apiKey: "AIzaSyDoDTekynERllEotpTRVDKXRdVbtq2FIBE",
@@ -78,7 +78,6 @@ async function handleAuth() {
             };
             
             // НАЧАЛЬНЫЕ ДАННЫЕ
-            // ИСПРАВЛЕНИЕ: Стартовый капитал 0.01 (как ты просил)
             updates['users/' + user.uid + '/saveData'] = {
                 credits: 0.01, 
                 hullParts: 0,
@@ -87,8 +86,9 @@ async function handleAuth() {
 
             await db.ref().update(updates);
             
-            // Сразу считаем игру "загруженной", так как это новая игра
-            isGameLoaded = true;
+            // Мы НЕ ставим isGameLoaded = true здесь вручную, 
+            // так как onAuthStateChanged сработает следом и запустит loadGameData,
+            // который теперь корректно создаст корабль.
             
         } else {
             // ВХОД
@@ -120,7 +120,6 @@ window.logoutUser = function() {
 };
 
 // Слушатель: когда пользователь входит или выходит
-// Слушатель: когда пользователь входит или выходит
 auth.onAuthStateChanged((user) => {
     if (user) {
         // --- УСПЕШНЫЙ ВХОД ---
@@ -132,8 +131,6 @@ auth.onAuthStateChanged((user) => {
         isGameLoaded = false;
 
         // === СТРОГАЯ ОЧИСТКА ПРИ РАЗРЫВЕ СОЕДИНЕНИЯ ===
-        // Как только сервер Firebase зафиксирует потерю связи с клиентом (закрытие вкладки, лаг),
-        // он автоматически удалит запись игрока из online_players.
         db.ref('online_players/' + user.uid).onDisconnect().remove();
         
         // Получаем никнейм для HUD
@@ -158,7 +155,6 @@ auth.onAuthStateChanged((user) => {
 
     } else {
         // --- ПОЛЬЗОВАТЕЛЬ ВЫШЕЛ ---
-        // --- ПОЛЬЗОВАТЕЛЬ ВЫШЕЛ ---
         if (window.forceFullCoopCleanup) window.forceFullCoopCleanup();
         currentUser = null;
         authModal.style.display = 'flex'; 
@@ -173,8 +169,6 @@ auth.onAuthStateChanged((user) => {
 });
 
 // Глобальная функция сохранения
-/* firebase_manager.js */
-
 window.saveGameData = function() {
     if (!currentUser) return;
     
@@ -203,8 +197,6 @@ window.saveGameData = function() {
     db.ref('users/' + currentUser.uid + '/saveData').update(dataToSave);
 };
 
-/* firebase_manager.js */
-
 function loadGameData() {
     if (!currentUser) return;
     
@@ -223,11 +215,18 @@ function loadGameData() {
                 window.placedStorageItems = data.inventory;
             }
 
-            // Загрузка структуры
-            if (data.shipStructure) {
+            // --- ИСПРАВЛЕНИЕ: ПРОВЕРКА НАЛИЧИЯ КОРАБЛЯ ---
+            if (data.shipStructure && data.shipStructure.tiles && data.shipStructure.tiles.length > 0) {
+                // Если есть сохраненный корабль - загружаем его
                 if (data.shipStructure.tiles) window.shipTiles = data.shipStructure.tiles;
                 if (data.shipStructure.modules) window.installedModules = data.shipStructure.modules;
+            } else {
+                // Если профиль есть (кредиты и т.д.), НО корабля нет (новая регистрация)
+                // Генерируем стартовый корабль
+                console.log("Profile exists but no ship found. Generating default ship.");
+                if (window.initShip) window.initShip();
             }
+            // ----------------------------------------------
             
             // ПРИНУДИТЕЛЬНОЕ ПОЗИЦИОНИРОВАНИЕ ИГРОКА (до завершения загрузки)
             if (window.placePlayerInShip) window.placePlayerInShip();
@@ -240,11 +239,11 @@ function loadGameData() {
             if(window.updateCurrencyUI) window.updateCurrencyUI();
             if(window.updateBuildUI) window.updateBuildUI();
         } else {
-            // ЕСЛИ СОХРАНЕНИЯ НЕТ — СОЗДАЕМ БАЗОВЫЙ КОРАБЛЬ
+            // ЕСЛИ СОХРАНЕНИЯ ВООБЩЕ НЕТ — СОЗДАЕМ БАЗОВЫЙ КОРАБЛЬ
             if (window.initShip) window.initShip();
         }
         
-        // Только теперь разрешаем игру
+        // Только теперь разрешаем игру и сохранения
         isGameLoaded = true; 
         console.log("Game fully loaded. Saving enabled.");
         
@@ -253,7 +252,6 @@ function loadGameData() {
         isGameLoaded = true; // Чтобы не блокировать игру при ошибке сети
     });
 }
-
 
 window.findUserByNickname = async function(nickname) {
     if (!nickname) return null;
